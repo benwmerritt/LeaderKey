@@ -11,6 +11,7 @@ struct AdvancedPane: View {
 
   @Default(.configDir) var configDir
   @Default(.modifierKeyConfiguration) var modifierKeyConfiguration
+  @Default(.groupActionThreshold) var groupActionThreshold
   @Default(.autoOpenCheatsheet) var autoOpenCheatsheet
   @Default(.cheatsheetDelayMS) var cheatsheetDelayMS
   @Default(.reactivateBehavior) var reactivateBehavior
@@ -76,6 +77,22 @@ struct AdvancedPane: View {
             )
             .font(.callout)
             .foregroundColor(.secondary)
+          }
+
+          Divider().padding(.vertical, 4)
+
+          VStack(alignment: .leading, spacing: 8) {
+            HStack {
+              Text("Safety threshold:")
+              TextField("", value: $groupActionThreshold, formatter: NumberFormatter())
+                .frame(width: 50)
+              Text("actions")
+              Spacer()
+            }
+
+            Text("Group Actions will be blocked if the group contains more than this many actions. Set to 0 to disable the limit.")
+              .font(.callout)
+              .foregroundColor(.secondary)
           }
         }
         .padding(.top, 2)

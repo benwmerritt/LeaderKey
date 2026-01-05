@@ -15,6 +15,8 @@ extension Defaults.Keys {
     "forceEnglishKeyboardLayout", default: false, suite: defaultsSuite)
   static let modifierKeyConfiguration = Key<ModifierKeyConfig>(
     "modifierKeyConfiguration", default: .controlGroupOptionSticky, suite: defaultsSuite)
+  static let groupActionThreshold = Key<Int>(
+    "groupActionThreshold", default: 5, suite: defaultsSuite)
   static let theme = Key<Theme>(
     "theme", default: .mysteryBox, suite: defaultsSuite)
 

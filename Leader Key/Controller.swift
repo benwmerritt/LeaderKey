@@ -89,6 +89,9 @@ class Controller {
   }
 
   func keyDown(with event: NSEvent) {
+    // Ignore key repeat events to prevent multiple action executions
+    guard !event.isARepeat else { return }
+
     // Reset the delay timer
     if Defaults[.autoOpenCheatsheet] == .delay {
       scheduleCheatsheet()
@@ -171,8 +174,16 @@ class Controller {
       // If execute is false, just stay visible showing the matched action
     case .group(let group):
       if execute, let mods = modifiers, shouldRunGroupSequenceWithModifiers(mods) {
-        hide {
-          self.runGroup(group)
+        let actionCount = countActionsInGroup(group)
+        let threshold = Defaults[.groupActionThreshold]
+
+        if threshold > 0 && actionCount > threshold {
+          // Show warning instead of executing
+          showGroupThresholdWarning(group: group, actionCount: actionCount)
+        } else {
+          hide {
+            self.runGroup(group)
+          }
         }
       } else {
         userState.display = group.key
@@ -297,6 +308,32 @@ class Controller {
         runAction(action)
       }
     }
+  }
+
+  private func countActionsInGroup(_ group: Group) -> Int {
+    var count = 0
+    for item in group.actions {
+      switch item {
+      case .group(let subgroup):
+        count += countActionsInGroup(subgroup)
+      case .action:
+        count += 1
+      }
+    }
+    return count
+  }
+
+  private func showGroupThresholdWarning(group: Group, actionCount: Int) {
+    let threshold = Defaults[.groupActionThreshold]
+    let alert = NSAlert()
+    alert.messageText = "Too many actions to run at once"
+    alert.informativeText = "The group '\(group.label ?? group.key)' contains \(actionCount) actions, which exceeds the safety threshold of \(threshold). You can adjust this limit in Settings > Advanced."
+    alert.alertStyle = .warning
+    alert.addButton(withTitle: "OK")
+    alert.runModal()
+
+    // Keep window visible for user to navigate normally
+    window.makeKeyAndOrderFront(nil)
   }
 
   private func runAction(_ action: Action) {
