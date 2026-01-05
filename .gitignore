@@ -2,3 +2,6 @@ Updates/*
 *xcuserdata*
 default.profraw
 build/
+
+# Mac system files
+.DS_Store
