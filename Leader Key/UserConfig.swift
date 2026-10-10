@@ -242,7 +242,10 @@ class UserConfig: ObservableObject {
   }
 
   private func writeFile(data: Data) throws {
-    try data.write(to: url, options: .atomic)
+    // An atomic write renames a temporary file over its destination, so writing to a
+    // symlinked config.json would replace the link with a plain file. Writing to the
+    // resolved target keeps the link (and whatever manages it) in place.
+    try data.write(to: url.resolvingSymlinksInPath(), options: .atomic)
   }
 
   private func readFile() throws -> String {
