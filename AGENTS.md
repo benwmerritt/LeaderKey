@@ -37,7 +37,7 @@ Leader Key is a macOS application that provides customizable keyboard shortcuts.
 **Theme System:**
 
 - Themes inherit from `MainWindow` and implement `draw()` method
-- Available themes: MysteryBox, Mini, Breadcrumbs, ForTheHorde, Cheater
+- Available themes: Mini, Cheater
 - Each theme provides different visual representations of shortcuts
 
 **Configuration Flow:**

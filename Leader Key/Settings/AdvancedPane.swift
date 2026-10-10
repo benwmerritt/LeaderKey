@@ -1,6 +1,4 @@
 import Defaults
-import KeyboardShortcuts
-import LaunchAtLogin
 import Settings
 import SwiftUI
 
@@ -10,8 +8,7 @@ struct AdvancedPane: View {
   @EnvironmentObject private var config: UserConfig
 
   @Default(.configDir) var configDir
-  @Default(.modifierKeyConfiguration) var modifierKeyConfiguration
-  @Default(.groupActionThreshold) var groupActionThreshold
+  @Default(.stickyModeModifier) var stickyModeModifier
   @Default(.autoOpenCheatsheet) var autoOpenCheatsheet
   @Default(.cheatsheetDelayMS) var cheatsheetDelayMS
   @Default(.reactivateBehavior) var reactivateBehavior
@@ -50,52 +47,22 @@ struct AdvancedPane: View {
       }
 
       Settings.Section(
-        title: "Modifier Keys", bottomDivider: true
+        title: "Sticky Mode", bottomDivider: true
       ) {
-        VStack(alignment: .leading, spacing: 16) {
-          HStack {
-            Picker("", selection: $modifierKeyConfiguration) {
-              ForEach(ModifierKeyConfig.allCases) { config in
-                Text(config.description).tag(config)
-              }
+        VStack(alignment: .leading, spacing: 8) {
+          Picker("", selection: $stickyModeModifier) {
+            ForEach(StickyModeModifier.allCases) { modifier in
+              Text(modifier.description).tag(modifier)
             }
-            .frame(width: 280)
-            .labelsHidden()
           }
+          .frame(width: 160)
+          .labelsHidden()
 
-          VStack(alignment: .leading, spacing: 8) {
-            Text(
-              "Group Actions: When the modifier key is held while pressing a group key, it runs all actions in that group and its sub-groups."
-            )
-            .font(.callout)
-            .foregroundColor(.secondary)
-          }
-
-          VStack(alignment: .leading, spacing: 8) {
-            Text(
-              "Sticky Mode: When the modifier key is held while triggering an action, Leader Key stays open after the action completes."
-            )
-            .font(.callout)
-            .foregroundColor(.secondary)
-          }
-
-          Divider().padding(.vertical, 4)
-
-          VStack(alignment: .leading, spacing: 8) {
-            HStack {
-              Text("Safety threshold:")
-              TextField("", value: $groupActionThreshold, formatter: NumberFormatter())
-                .frame(width: 50)
-              Text("actions")
-              Spacer()
-            }
-
-            Text(
-              "Group Actions will be blocked if the group contains more than this many actions. Set to 0 to disable the limit."
-            )
-            .font(.callout)
-            .foregroundColor(.secondary)
-          }
+          Text(
+            "When this modifier is held while triggering an action, Leader Key stays open after the action completes."
+          )
+          .font(.callout)
+          .foregroundColor(.secondary)
         }
         .padding(.top, 2)
       }
@@ -165,16 +132,6 @@ struct AdvancedPane: View {
       }
       Settings.Section(title: "Other") {
         Defaults.Toggle("Show Leader Key in menubar", key: .showMenuBarIcon)
-        VStack(alignment: .leading, spacing: 4) {
-          Defaults.Toggle(
-            "Force English keyboard layout", key: .forceEnglishKeyboardLayout)
-          Text(
-            "When enabled, letter keys are interpreted in US-English (QWERTY) regardless of your current keyboard layout."
-          )
-          .font(.caption)
-          .foregroundColor(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-        }
       }
     }
   }

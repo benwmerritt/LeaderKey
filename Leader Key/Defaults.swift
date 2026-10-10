@@ -11,14 +11,12 @@ extension Defaults.Keys {
     "configDir", default: UserConfig.defaultDirectory(), suite: defaultsSuite)
   static let showMenuBarIcon = Key<Bool>(
     "showInMenubar", default: true, suite: defaultsSuite)
-  static let forceEnglishKeyboardLayout = Key<Bool>(
-    "forceEnglishKeyboardLayout", default: false, suite: defaultsSuite)
-  static let modifierKeyConfiguration = Key<ModifierKeyConfig>(
-    "modifierKeyConfiguration", default: .controlGroupOptionSticky, suite: defaultsSuite)
-  static let groupActionThreshold = Key<Int>(
-    "groupActionThreshold", default: 5, suite: defaultsSuite)
+  // Stored under the name the setting had when it also chose the group-execution modifier,
+  // so a preference written by an earlier build still applies.
+  static let stickyModeModifier = Key<StickyModeModifier>(
+    "modifierKeyConfiguration", default: .option, suite: defaultsSuite)
   static let theme = Key<Theme>(
-    "theme", default: .mysteryBox, suite: defaultsSuite)
+    "theme", default: .mini, suite: defaultsSuite)
 
   static let autoOpenCheatsheet = Key<AutoOpenCheatsheetSetting>(
     "autoOpenCheatsheet",
@@ -49,18 +47,34 @@ enum AutoOpenCheatsheetSetting: String, Defaults.Serializable {
   case delay
 }
 
-enum ModifierKeyConfig: String, Codable, Defaults.Serializable, CaseIterable, Identifiable {
-  case controlGroupOptionSticky
-  case optionGroupControlSticky
+/// The modifier held while triggering an action to keep Leader Key open afterwards.
+enum StickyModeModifier: String, Defaults.Serializable, CaseIterable, Identifiable {
+  case option
+  case control
+
+  /// Earlier builds stored one of two combined values that also chose the modifier for
+  /// running a whole group; each named the sticky modifier in its second half.
+  init?(rawValue: String) {
+    switch rawValue {
+    case "option", "controlGroupOptionSticky": self = .option
+    case "control", "optionGroupControlSticky": self = .control
+    default: return nil
+    }
+  }
 
   var id: Self { self }
 
+  var modifierFlag: NSEvent.ModifierFlags {
+    switch self {
+    case .option: return .option
+    case .control: return .control
+    }
+  }
+
   var description: String {
     switch self {
-    case .controlGroupOptionSticky:
-      return "⌃ Group sequences, ⌥ Sticky mode"
-    case .optionGroupControlSticky:
-      return "⌥ Group sequences, ⌃ Sticky mode"
+    case .option: return "⌥ Option"
+    case .control: return "⌃ Control"
     }
   }
 }
