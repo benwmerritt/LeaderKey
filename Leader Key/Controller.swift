@@ -130,7 +130,9 @@ class Controller {
     }
   }
 
-  func handleKey(_ key: String, withModifiers modifiers: NSEvent.ModifierFlags? = nil, execute: Bool = true) {
+  func handleKey(
+    _ key: String, withModifiers modifiers: NSEvent.ModifierFlags? = nil, execute: Bool = true
+  ) {
     if key == "?" {
       showCheatsheet()
       return
@@ -171,7 +173,7 @@ class Controller {
           }
         }
       }
-      // If execute is false, just stay visible showing the matched action
+    // If execute is false, just stay visible showing the matched action
     case .group(let group):
       if execute, let mods = modifiers, shouldRunGroupSequenceWithModifiers(mods) {
         let actionCount = countActionsInGroup(group)
@@ -327,7 +329,8 @@ class Controller {
     let threshold = Defaults[.groupActionThreshold]
     let alert = NSAlert()
     alert.messageText = "Too many actions to run at once"
-    alert.informativeText = "The group '\(group.label ?? group.key)' contains \(actionCount) actions, which exceeds the safety threshold of \(threshold). You can adjust this limit in Settings > Advanced."
+    alert.informativeText =
+      "The group '\(group.label ?? group.key)' contains \(actionCount) actions, which exceeds the safety threshold of \(threshold). You can adjust this limit in Settings > Advanced."
     alert.alertStyle = .warning
     alert.addButton(withTitle: "OK")
     alert.runModal()

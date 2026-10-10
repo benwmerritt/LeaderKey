@@ -90,9 +90,11 @@ struct AdvancedPane: View {
               Spacer()
             }
 
-            Text("Group Actions will be blocked if the group contains more than this many actions. Set to 0 to disable the limit.")
-              .font(.callout)
-              .foregroundColor(.secondary)
+            Text(
+              "Group Actions will be blocked if the group contains more than this many actions. Set to 0 to disable the limit."
+            )
+            .font(.callout)
+            .foregroundColor(.secondary)
           }
         }
         .padding(.top, 2)
