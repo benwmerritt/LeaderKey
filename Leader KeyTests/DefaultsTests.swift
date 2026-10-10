@@ -9,20 +9,48 @@ final class DefaultsTests: XCTestCase {
     XCTAssertEqual(Defaults.Keys.theme.defaultValue, .mini)
   }
 
+  func testKeptThemesDecode() {
+    XCTAssertEqual(decode(.theme, stored: "mini"), .mini)
+    XCTAssertEqual(decode(.theme, stored: "cheater"), .cheater)
+  }
+
   func testRemovedThemesDecodeToMini() {
     for stored in ["mysteryBox", "breadcrumbs", "forTheHorde"] {
       XCTAssertEqual(decode(.theme, stored: stored), .mini, "stored theme \(stored)")
     }
   }
 
+  /// The exact strings earlier builds stored, quotes included.
   func testLegacyModifierConfigurationKeepsItsStickyModifier() {
-    XCTAssertEqual(decode(.stickyModeModifier, stored: "controlGroupOptionSticky"), .option)
-    XCTAssertEqual(decode(.stickyModeModifier, stored: "optionGroupControlSticky"), .control)
+    XCTAssertEqual(decode(.stickyModeModifier, stored: #""controlGroupOptionSticky""#), .option)
+    XCTAssertEqual(decode(.stickyModeModifier, stored: #""optionGroupControlSticky""#), .control)
   }
 
-  func testStickyModifierRoundTripsAndFallsBackToOption() {
-    XCTAssertEqual(decode(.stickyModeModifier, stored: "control"), .control)
-    XCTAssertEqual(decode(.stickyModeModifier, stored: "option"), .option)
+  /// Pins the quoted form above to what Defaults writes for a type shaped like the old one.
+  func testDefaultsStoredTheLegacyTypeAsQuotedJSON() {
+    let suiteName = UUID().uuidString
+    let suite = UserDefaults(suiteName: suiteName)!
+    defer { suite.removePersistentDomain(forName: suiteName) }
+    let key = Defaults.Key<LegacyModifierKeyConfig>(
+      "modifierKeyConfiguration", default: .controlGroupOptionSticky, suite: suite)
+
+    Defaults[key] = .optionGroupControlSticky
+
+    XCTAssertEqual(suite.string(forKey: key.name), #""optionGroupControlSticky""#)
+  }
+
+  func testStickyModifierRoundTripsAsPlainRawValue() {
+    let key = Defaults.Keys.stickyModeModifier
+    defer { key.suite.removeObject(forKey: key.name) }
+
+    for modifier in StickyModeModifier.allCases {
+      Defaults[key] = modifier
+      XCTAssertEqual(key.suite.string(forKey: key.name), modifier.rawValue)
+      XCTAssertEqual(Defaults[key], modifier)
+    }
+  }
+
+  func testUnknownStickyModifierFallsBackToOption() {
     XCTAssertEqual(decode(.stickyModeModifier, stored: "nonsense"), .option)
   }
 
@@ -35,4 +63,10 @@ final class DefaultsTests: XCTestCase {
     defer { key.suite.removeObject(forKey: key.name) }
     return Defaults[key]
   }
+}
+
+/// The shape of the setting before sticky mode got its own type.
+private enum LegacyModifierKeyConfig: String, Codable, Defaults.Serializable {
+  case controlGroupOptionSticky
+  case optionGroupControlSticky
 }

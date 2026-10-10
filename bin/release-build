@@ -1,29 +1,33 @@
 #!/usr/bin/env bash
 # Signed release build of Leader Key: build/release/Leader-Key-<version>.zip.
 #
-# Signs with the fork's self-signed certificate from a temporary keychain that
-# exists only for this run, verifies the app and every embedded Sparkle
-# component, and checks the app's designated requirement against the pinned
-# signing/designated-requirement.txt, so macOS sees every release as the same
-# app and its permissions survive updates. Used by .github/workflows/release.yml
-# and for smoke tests on mba13.
+# Signs with the certificate in SIGNING_P12 from a temporary keychain that exists
+# only for this run, verifies the app and every embedded Sparkle component, and
+# checks the app's designated requirement against DESIGNATED_REQUIREMENT_FILE.
+# For a release that is the pinned signing/designated-requirement.txt, so macOS
+# sees every release as the same app and its permissions survive updates. Used by
+# .github/workflows/release.yml and for smoke tests on mba13.
 #
 # Environment:
-#   SIGNING_P12           path to the .p12 holding the certificate and key (required)
-#   SIGNING_P12_PASSWORD  its password (required)
-#   MARKETING_VERSION     x.y.z; default: the project's
-#   BUILD_NUMBER          CFBundleVersion; default: git rev-list --count HEAD
-#   DEVELOPER_DIR         honoured; default: /Applications/Xcode.app
+#   SIGNING_P12                  path to the .p12 holding the certificate and key (required)
+#   SIGNING_P12_PASSWORD         its password (required); only openssl reads it, from the
+#                                environment, so it never appears in a command line
+#   DESIGNATED_REQUIREMENT_FILE  the requirement the signed app must have;
+#                                default: signing/designated-requirement.txt
+#   MARKETING_VERSION            x.y.z; default: the project's
+#   BUILD_NUMBER                 CFBundleVersion; default: git rev-list --count HEAD
+#   DEVELOPER_DIR                honoured; default: /Applications/Xcode.app
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 
-identity_sha1="4159da3fbef7479b9337643e05a13a6258830b92"
-requirement_file="signing/designated-requirement.txt"
+requirement_file="${DESIGNATED_REQUIREMENT_FILE:-signing/designated-requirement.txt}"
 derived_data="build/DerivedData-release"
 output_dir="build/release"
+# Apple's LibreSSL, on every Mac, so CI and smoke tests read the .p12 with the same tool.
+openssl=/usr/bin/openssl
 
 log() { echo "release-build: $*" >&2; }
 fail() {
@@ -50,28 +54,34 @@ tmp_root="${TMPDIR:-/tmp}"
 work="$(mktemp -d "$tmp_root/leaderkey-release.XXXXXX")"
 chmod 700 "$work"
 keychain="$work/signing.keychain-db"
-keychain_password="$(openssl rand -hex 32)"
+keychain_password="$("$openssl" rand -hex 32)"
+key="$work/key.pem"
 cert="$work/cert.pem"
 # The user search list as it was, one path per line, so the trap can restore it.
+search_list="$(security list-keychains -d user)"
 original_keychains=()
 while IFS= read -r line; do
   line="${line#"${line%%[![:space:]]*}"}"
   line="${line#\"}"
   line="${line%\"}"
-  [[ -n "$line" ]] && original_keychains+=("$line")
-done <<<"$(security list-keychains -d user)"
+  if [[ -n "$line" ]]; then original_keychains+=("$line"); fi
+done <<<"$search_list"
 search_list_changed=0
 trusted_in=""
 
 cleanup() {
   local status=$?
   set +e
-  case "$trusted_in" in
-    user) security remove-trusted-cert "$cert" >/dev/null 2>&1 ;;
-    admin) sudo -n security remove-trusted-cert -d "$cert" >/dev/null 2>&1 ;;
-  esac
-  if ((search_list_changed)) && ((${#original_keychains[@]})); then
-    security list-keychains -d user -s "${original_keychains[@]}"
+  if [[ "$trusted_in" == user ]]; then
+    security remove-trusted-cert "$cert" >/dev/null 2>&1 \
+      || log "could not remove the user trust setting for the certificate"
+  elif [[ "$trusted_in" == admin ]]; then
+    sudo -n security remove-trusted-cert -d "$cert" >/dev/null 2>&1 \
+      || log "could not remove the admin trust setting for the certificate"
+  fi
+  if ((search_list_changed)); then
+    # Bash 3.2 treats an empty "${array[@]}" as unbound under set -u; this form expands to nothing.
+    security list-keychains -d user -s ${original_keychains[@]+"${original_keychains[@]}"}
   fi
   [[ -f "$keychain" ]] && security delete-keychain "$keychain"
   rm -rf "$work"
@@ -81,38 +91,68 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# security import would need the password as an argument, where ps shows it, so openssl
+# (which reads it from the environment) unpacks the key and certificate into files only this
+# user can read, and those are imported without a password.
+if ! (umask 077 && "$openssl" pkcs12 -in "$SIGNING_P12" -passin env:SIGNING_P12_PASSWORD \
+  -nocerts -nodes -out "$key" 2>"$work/openssl.err"); then
+  cat "$work/openssl.err" >&2
+  fail "could not read the key from $SIGNING_P12 (wrong password?)"
+fi
+if ! "$openssl" pkcs12 -in "$SIGNING_P12" -passin env:SIGNING_P12_PASSWORD \
+  -nokeys -clcerts -out "$cert" 2>"$work/openssl.err"; then
+  cat "$work/openssl.err" >&2
+  fail "could not read the certificate from $SIGNING_P12"
+fi
+identity_sha1="$("$openssl" x509 -in "$cert" -noout -fingerprint -sha1 \
+  | sed -e 's/.*=//' -e 's/://g' | tr '[:upper:]' '[:lower:]')"
+[[ "$identity_sha1" =~ ^[0-9a-f]{40}$ ]] || fail "could not fingerprint the certificate in $SIGNING_P12"
+grep -qF "H\"$identity_sha1\"" "$requirement_file" \
+  || fail "the certificate in SIGNING_P12 ($identity_sha1) is not the one $requirement_file names"
+
 security create-keychain -p "$keychain_password" "$keychain"
 security set-keychain-settings -u -t 21600 "$keychain"
 security unlock-keychain -p "$keychain_password" "$keychain"
-security import "$SIGNING_P12" -k "$keychain" -P "$SIGNING_P12_PASSWORD" -f pkcs12 \
-  -T /usr/bin/codesign -T /usr/bin/security >/dev/null
+security import "$key" -k "$keychain" -T /usr/bin/codesign -T /usr/bin/security >/dev/null
+rm -f "$key"
+security import "$cert" -k "$keychain" >/dev/null
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" \
   "$keychain" >/dev/null
-security list-keychains -d user -s "$keychain" "${original_keychains[@]}"
 search_list_changed=1
+security list-keychains -d user -s "$keychain" ${original_keychains[@]+"${original_keychains[@]}"}
 
-security find-identity -p codesigning "$keychain" | grep -qi "$identity_sha1" \
-  || fail "the .p12 does not hold identity $identity_sha1"
+# Read the whole listing before matching: grep -q would exit early and SIGPIPE security.
+identities="$(security find-identity -p codesigning "$keychain" | tr '[:upper:]' '[:lower:]')" \
+  || fail "security find-identity failed"
+[[ "$identities" == *"$identity_sha1"* ]] \
+  || fail "the keychain holds no signing identity $identity_sha1; do the key and certificate match?"
 
-# --- Trust fallback -----------------------------------------------------------
+# --- Trust fallback (CI only) ---------------------------------------------------
 # codesign takes the untrusted self-signed identity by hash on current macOS. If
-# it ever refuses (CSSMERR_TP_NOT_TRUSTED), trust the certificate for code
-# signing for the rest of this run; the trap removes that again.
+# it ever refuses (CSSMERR_TP_NOT_TRUSTED), trusting the certificate means a user
+# or admin trust setting, which outlives the keychain. Do that only on a GitHub
+# runner, which is thrown away after the job, and remove it again on exit.
 
 probe="$work/probe"
 cp /usr/bin/true "$probe"
 if ! codesign --force --sign "$identity_sha1" --keychain "$keychain" "$probe" 2>"$work/probe.err"; then
-  log "codesign refused the identity ($(tr -d '\n' <"$work/probe.err")); trusting it for this run"
-  security export -k "$keychain" -t certs -f pemseq -o "$cert" >/dev/null 2>&1
-  if security add-trusted-cert -r trustRoot -p codeSign "$cert" 2>/dev/null; then
+  reason="$(tr -d '\n' <"$work/probe.err")"
+  if [[ "${GITHUB_ACTIONS:-}" != true ]]; then
+    fail "codesign refused the certificate ($reason). Trusting it would change this Mac's" \
+      "trust settings, which this script does only on GitHub Actions runners. Trust the" \
+      "certificate for code signing in Keychain Access, or build the release on CI."
+  fi
+  log "codesign refused the certificate ($reason); trusting it for code signing until this run ends"
+  if security add-trusted-cert -r trustRoot -p codeSign -k "$keychain" "$cert" 2>/dev/null; then
     trusted_in=user
-  elif sudo -n security add-trusted-cert -d -r trustRoot -p codeSign "$cert" 2>/dev/null; then
+  elif sudo -n security add-trusted-cert -d -r trustRoot -p codeSign -k "$keychain" "$cert" \
+    2>/dev/null; then
     trusted_in=admin
   else
-    fail "could not add trust settings; needs a GUI session or passwordless sudo"
+    fail "could not add a trust setting for the certificate"
   fi
   codesign --force --sign "$identity_sha1" --keychain "$keychain" "$probe" \
-    || fail "codesign still refuses the identity after trusting it"
+    || fail "codesign still refuses the certificate after trusting it"
 fi
 
 # --- Build --------------------------------------------------------------------
@@ -175,7 +215,7 @@ signer_of() {
   rm -f "$work"/signer-*
   codesign -d --extract-certificates="$work/signer-" "$1" 2>/dev/null
   [[ -f "$work/signer-0" ]] || return 1
-  openssl x509 -inform der -in "$work/signer-0" -noout -fingerprint -sha1 \
+  "$openssl" x509 -inform der -in "$work/signer-0" -noout -fingerprint -sha1 \
     | sed -e 's/.*=//' -e 's/://g' | tr '[:upper:]' '[:lower:]'
 }
 
@@ -190,7 +230,10 @@ for component in "${components[@]}"; do
 done
 log "verified ${#components[@]} signatures by $identity_sha1"
 
-codesign -d -r- "$app" 2>/dev/null >"$work/requirement.txt"
+if ! codesign -d -r- "$app" >"$work/requirement.txt" 2>"$work/codesign.err"; then
+  cat "$work/codesign.err" >&2
+  fail "could not read the app's designated requirement"
+fi
 diff -u "$requirement_file" "$work/requirement.txt" >&2 \
   || fail "designated requirement differs from $requirement_file"
 

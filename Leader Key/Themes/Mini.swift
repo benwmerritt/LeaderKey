@@ -68,7 +68,7 @@ enum Mini {
   }
 }
 
-struct Invisible_MainView_Previews: PreviewProvider {
+struct MiniMainView_Previews: PreviewProvider {
   static var previews: some View {
     VStack {
       Mini.MainView().environmentObject(

@@ -1,17 +1,14 @@
-import Combine
 import XCTest
 
 @testable import Leader_Key
 
 class KeyboardLayoutTests: XCTestCase {
   var controller: Controller!
-  var cancellables: Set<AnyCancellable>!
   var userState: UserState!
   var userConfig: UserConfig!
 
   override func setUp() {
     super.setUp()
-    cancellables = Set<AnyCancellable>()
 
     // Create test instances
     userConfig = UserConfig()
@@ -20,7 +17,6 @@ class KeyboardLayoutTests: XCTestCase {
   }
 
   override func tearDown() {
-    cancellables = nil
     controller = nil
     userState = nil
     userConfig = nil

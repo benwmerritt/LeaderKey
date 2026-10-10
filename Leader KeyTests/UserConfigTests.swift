@@ -152,7 +152,8 @@ final class UserConfigTests: XCTestCase {
     XCTAssertEqual(subject.root.actions.count, 1)
 
     subject.root.actions.append(addedAction)
-    waitForDebouncedSave()
+    // Editing `root` saves after a 300 ms debounce, writing on a background queue.
+    waitUntil("the debounced save") { self.savedKeys(at: target) == ["a", "z"] }
 
     XCTAssertTrue(isSymlink(subject.path), "save replaced the symlink with a plain file")
     XCTAssertEqual(savedKeys(at: target), ["a", "z"])
@@ -182,7 +183,7 @@ final class UserConfigTests: XCTestCase {
     waitForConfigLoad()
 
     subject.root.actions.append(addedAction)
-    waitForDebouncedSave()
+    waitUntil("the debounced save") { self.savedKeys(at: self.subject.path) == ["a", "z"] }
 
     XCTAssertFalse(isSymlink(subject.path))
     XCTAssertEqual(savedKeys(at: subject.path), ["a", "z"])
@@ -234,20 +235,24 @@ final class UserConfigTests: XCTestCase {
     return group.actions.compactMap { $0.item.key }
   }
 
+  /// Loading decodes on a background queue and publishes `root` on the main queue.
   private func waitForConfigLoad() {
-    let expectation = expectation(description: "config load flush")
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-      expectation.fulfill()
-    }
-    self.wait(for: [expectation], timeout: 1.0)
+    waitUntil("the config to load") { !self.subject.isLoading }
   }
 
-  /// Editing `root` saves on a 300 ms debounce, then writes on a background queue.
-  private func waitForDebouncedSave() {
-    let expectation = expectation(description: "debounced save flush")
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-      expectation.fulfill()
+  /// Spins the main run loop, so queued main-queue work runs, until `condition` holds.
+  private func waitUntil(
+    _ description: String, timeout: TimeInterval = 5,
+    file: StaticString = #filePath, line: UInt = #line,
+    _ condition: () -> Bool
+  ) {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !condition() {
+      guard Date() < deadline else {
+        XCTFail("timed out waiting for \(description)", file: file, line: line)
+        return
+      }
+      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
-    self.wait(for: [expectation], timeout: 2.0)
   }
 }

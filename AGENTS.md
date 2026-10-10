@@ -10,17 +10,16 @@ Builds and tests need macOS with Xcode. Edit on agentmini; build and test on mba
 
 - Lint and run every test: `~/fleet/bin/agent-gate run`. It runs the commands in `.agent-gate.json` on mba13 against the committed HEAD, so commit first: it refuses a tree with uncommitted or untracked files. Passed when it exits 0 and prints `checks passed`.
 - Run one test, on a Mac: the `xcodebuild test` command in `.agent-gate.json` plus `-only-testing:"Leader KeyTests/UserConfigTests/testInitializesWithDefaults"`
-- Release build, ad-hoc signed, left at `build/Leader Key.app`: `bin/build`
-- Signed release build exactly as CI makes it, left at `build/release/Leader-Key-<version>.zip`: `SIGNING_P12=<path> SIGNING_P12_PASSWORD=<password> bin/release-build`. The `.p12` and its password live outside the repository. A change to `bin/release-build`, `signing/` or `.github/workflows/release.yml` gets this smoke test on mba13 before it ships.
+- Release build, ad-hoc signed, left at `build/Leader Key.app`: `bin/build`. Like a release's, its build number is the commit count, which is what Sparkle compares to decide whether a release is newer.
+- Signed release build exactly as CI makes it, left at `build/release/Leader-Key-<version>.zip`: `SIGNING_P12=<path> SIGNING_P12_PASSWORD="$(cat <password file>)" bin/release-build`, reading the password from a file so that no command line carries it. The `.p12` and its password live outside the repository. A change to `bin/release-build`, `bin/release-appcast`, `signing/` or `.github/workflows/release.yml` gets this smoke test on mba13 before it ships.
 - Install a build into `/Applications` (quits, backs up, relaunches): `bin/install [APP]`. To bootstrap a Mac, `scp` the `.app` and the script there and run it over SSH: scp sets no quarantine flag, so Gatekeeper never sees the unnotarised app.
-- Bump version: `bin/bump`
 
 ## Releases
 
-Tag a commit on `main` as `vX.Y.Z` and push the tag. `.github/workflows/release.yml` builds and signs the app on a GitHub macOS runner, generates `appcast.xml`, and publishes a GitHub release holding the zip and the appcast. Sparkle on the Macs reads `releases/latest/download/appcast.xml` and installs the update without asking. On every pull request to `main` the same workflow runs as a dry run and uploads the zip and appcast as a workflow artifact instead of publishing.
+Tag a commit on `main` as `vX.Y.Z` and push the tag. `.github/workflows/release.yml` builds and signs the app on a GitHub macOS runner, generates `appcast.xml`, and publishes a GitHub release holding the zip and the appcast. A tag outside `main`'s history fails the run, because the build number is the commit count and must only grow. Sparkle on the Macs reads `releases/latest/download/appcast.xml`, downloads a new release in the background, and installs it by relaunching Leader Key once the panel and Settings are closed, or at quit. On every pull request to `main` the same build and appcast run as a dry run, signed with a throwaway certificate and Sparkle key made in the job, and land in a workflow artifact instead of a release.
 
 - Signing uses a self-signed certificate: no Apple Developer account, no notarisation. The project stays ad-hoc so anyone can build; only `bin/release-build` applies the certificate. `signing/designated-requirement.txt` pins the signature's designated requirement, which is what lets macOS permissions survive updates; a different certificate gives a different requirement and the script fails instead of shipping it.
-- Repository secrets: `MACOS_SIGNING_P12_BASE64`, `MACOS_SIGNING_P12_PASSWORD`, `SPARKLE_ED_PRIVATE_KEY`. The matching public key is `SUPublicEDKey` in `Leader Key/Support/Info.plist`.
+- The signing secrets live in the `release` GitHub environment, which only `v*` tags may use, so pull-request runs never see them. The Sparkle key's public half is `SUPublicEDKey` in `Leader Key/Support/Info.plist`.
 
 ## Architecture Overview
 
@@ -28,7 +27,7 @@ Leader Key is a macOS application that provides customizable keyboard shortcuts.
 
 **Key Components:**
 
-- `AppDelegate`: Application lifecycle, global shortcuts registration, URL scheme handling, Sparkle update reminders
+- `AppDelegate`: Application lifecycle, global shortcuts registration, URL scheme handling, the Sparkle updater
 - `Controller`: Central event handling, manages key sequences and window display
 - `UserConfig`: JSON configuration management with validation
 - `UserState`: Tracks navigation through key sequences
@@ -43,7 +42,7 @@ Leader Key is a macOS application that provides customizable keyboard shortcuts.
 **Configuration Flow:**
 
 - Config stored at `~/Library/Application Support/Leader Key/config.json`; a symlink there is written through, so a dotfiles manager can own the file
-- Config reloads on activation and on `leaderkey://config-reload`; nothing watches the file
+- Config reloads only on request: the menu-bar "Reload config" item, the Settings "Read from file" button, `leaderkey://config-reload`, and the save-conflict alert's "Read from File". Nothing watches the file
 - `ConfigValidator` ensures no key conflicts
 - Actions support: applications, URLs, commands, folders
 

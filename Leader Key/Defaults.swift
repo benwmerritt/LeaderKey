@@ -48,16 +48,19 @@ enum AutoOpenCheatsheetSetting: String, Defaults.Serializable {
 }
 
 /// The modifier held while triggering an action to keep Leader Key open afterwards.
+///
+/// Not `Codable`, so Defaults stores the plain raw value (`option`, `control`).
 enum StickyModeModifier: String, Defaults.Serializable, CaseIterable, Identifiable {
   case option
   case control
 
-  /// Earlier builds stored one of two combined values that also chose the modifier for
-  /// running a whole group; each named the sticky modifier in its second half.
+  /// Earlier builds stored one of two combined values that also chose the modifier for running
+  /// a whole group; each named the sticky modifier in its second half. That type was `Codable`,
+  /// so Defaults stored it as JSON: the case name inside double quotes.
   init?(rawValue: String) {
     switch rawValue {
-    case "option", "controlGroupOptionSticky": self = .option
-    case "control", "optionGroupControlSticky": self = .control
+    case "option", #""controlGroupOptionSticky""#: self = .option
+    case "control", #""optionGroupControlSticky""#: self = .control
     default: return nil
     }
   }

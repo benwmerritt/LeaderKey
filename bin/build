@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Release build of Leader Key, ad-hoc signed, left at build/Leader Key.app.
 # Non-interactive: prints the app path on success, exits non-zero on failure.
+#
+# Environment:
+#   BUILD_NUMBER   CFBundleVersion; default: git rev-list --count HEAD, as for releases, so
+#                  Sparkle compares this build with releases by commit count. Without git
+#                  history the project's own build number stays, and a warning says so.
+#   DEVELOPER_DIR  honoured; default: /Applications/Xcode.app
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -11,6 +17,12 @@ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Develope
 derived_data="build/DerivedData"
 app="build/Leader Key.app"
 
+if [[ -z "${BUILD_NUMBER:-}" ]] && ! BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null)"; then
+  BUILD_NUMBER=""
+  echo "bin/build: no git history here, so the build keeps the project's build number;" \
+    "set BUILD_NUMBER to choose one" >&2
+fi
+
 xcodebuild build \
   -project "Leader Key.xcodeproj" \
   -scheme "Leader Key" \
@@ -20,7 +32,8 @@ xcodebuild build \
   -skipPackagePluginValidation \
   -skipMacroValidation \
   -quiet \
-  CODE_SIGN_IDENTITY=-
+  CODE_SIGN_IDENTITY=- \
+  ${BUILD_NUMBER:+CURRENT_PROJECT_VERSION="$BUILD_NUMBER"}
 
 rm -rf "$app"
 ditto "$derived_data/Build/Products/Release/Leader Key.app" "$app"

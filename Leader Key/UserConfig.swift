@@ -21,7 +21,7 @@ class UserConfig: ObservableObject {
   private let alertHandler: AlertHandler
   private let fileManager: FileManager
   private var lastReadChecksum: String?
-  private var isLoading = false
+  private(set) var isLoading = false
   private let configIOQueue = DispatchQueue(label: "ConfigIO", qos: .userInitiated)
   private var saveWorkItem: DispatchWorkItem?
 

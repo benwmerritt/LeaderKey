@@ -1,6 +1,6 @@
 # About this fork
 
-This is [benwmerritt](https://github.com/benwmerritt)'s personal build of [mikker/LeaderKey](https://github.com/mikker/LeaderKey): the same app and bundle ID, built and signed by this fork's GitHub Actions with a self-signed certificate. Updates come from [this fork's releases](https://github.com/benwmerritt/LeaderKey/releases): the app's Sparkle feed points at them and installs new versions by itself. Nothing is notarised, so a Mac gets its first copy through `bin/install` (after `bin/build`, or from a release zip) rather than by double-clicking a download. Everything below is upstream's README.
+This is [benwmerritt](https://github.com/benwmerritt)'s personal build of [mikker/LeaderKey](https://github.com/mikker/LeaderKey): the same app and bundle ID, built and signed by this fork's GitHub Actions with a self-signed certificate. Updates come from [this fork's releases](https://github.com/benwmerritt/LeaderKey/releases): the app's Sparkle updater reads their feed, downloads new versions in the background and installs them by relaunching Leader Key while its panel and Settings are closed. Nothing is notarised, so a Mac gets its first copy through `bin/install` (after `bin/build`, or from a release zip) rather than by double-clicking a download. Everything below is upstream's README.
 
 ---
 
