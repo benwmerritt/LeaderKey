@@ -2,16 +2,25 @@ import Cocoa
 import Defaults
 import KeyboardShortcuts
 import Settings
+import Sparkle
 import SwiftUI
+import UserNotifications
+
+let updateLocationIdentifier = "UpdateCheck"
 
 @NSApplicationMain
-class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate,
+  SPUStandardUserDriverDelegate,
+  UNUserNotificationCenterDelegate,
+  NSWindowDelegate
+{
   var controller: Controller!
 
   let statusItem = StatusItem()
   let config = UserConfig()
 
   var state: UserState!
+  @IBOutlet var updaterController: SPUStandardUpdaterController!
 
   lazy var settingsWindowController = SettingsWindowController(
     panes: [
@@ -37,6 +46,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     else { return }
     guard !isRunningTests() else { return }
 
+    UNUserNotificationCenter.current().delegate = self
+
     NSApp.mainMenu = MainMenu()
 
     config.ensureAndLoad()
@@ -54,6 +65,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     statusItem.handleRevealConfig = {
       NSWorkspace.shared.activateFileViewerSelecting([self.config.url])
+    }
+    statusItem.handleCheckForUpdates = {
+      self.updaterController.checkForUpdates(nil)
     }
 
     Task {
@@ -134,6 +148,64 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     controller.hide()
   }
 
+  // MARK: - Sparkle Gentle Reminders
+
+  @objc var supportsGentleScheduledUpdateReminders: Bool {
+    return true
+  }
+
+  func standardUserDriverWillHandleShowingUpdate(
+    _ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem,
+    state: SPUUserUpdateState
+  ) {
+    // Do not change activation policy here; Settings drives visibility
+
+    if !state.userInitiated {
+      NSApp.dockTile.badgeLabel = "1"
+
+      requestNotificationsAuthorizationIfNeeded { granted in
+        guard granted else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Leader Key Update Available"
+        content.body = "Version \(update.displayVersionString) is now available"
+
+        let request = UNNotificationRequest(
+          identifier: updateLocationIdentifier, content: content,
+          trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+      }
+    }
+  }
+
+  func standardUserDriverDidReceiveUserAttention(
+    forUpdate update: SUAppcastItem
+  ) {
+    NSApp.dockTile.badgeLabel = ""
+
+    UNUserNotificationCenter.current().removeDeliveredNotifications(
+      withIdentifiers: [
+        updateLocationIdentifier
+      ])
+  }
+
+  func standardUserDriverWillFinishUpdateSession() {}
+
+  // MARK: - UNUserNotificationCenter Delegate
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    if response.notification.request.identifier
+      == updateLocationIdentifier
+      && response.actionIdentifier == UNNotificationDefaultActionIdentifier
+    {
+      updaterController.checkForUpdates(nil)
+    }
+    completionHandler()
+  }
+
   func isRunningTests() -> Bool {
     let environment = ProcessInfo.processInfo.environment
     guard environment["XCTestSessionIdentifier"] != nil else { return false }
@@ -210,5 +282,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
       win == settingsWindowController.window
     else { return }
     NSApp.setActivationPolicy(.accessory)
+  }
+
+  private func requestNotificationsAuthorizationIfNeeded(
+    completion: @escaping (Bool) -> Void
+  ) {
+    UNUserNotificationCenter.current().getNotificationSettings { settings in
+      switch settings.authorizationStatus {
+      case .notDetermined:
+        UNUserNotificationCenter.current().requestAuthorization(options: [
+          .alert, .badge, .sound,
+        ]) { granted, _ in
+          DispatchQueue.main.async { completion(granted) }
+        }
+      case .authorized, .provisional, .ephemeral:
+        DispatchQueue.main.async { completion(true) }
+      case .denied:
+        DispatchQueue.main.async { completion(false) }
+      @unknown default:
+        DispatchQueue.main.async { completion(false) }
+      }
+    }
   }
 }
