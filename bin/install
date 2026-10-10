@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Install a Leader Key build into /Applications: quit the running app, back the
+# installed one up, copy the new build in, relaunch. Needs only the .app bundle.
+#
+#   bin/install [APP]    APP defaults to build/Leader Key.app in this checkout
+set -euo pipefail
+
+app="${1:-$(cd "$(dirname "$0")/.." && pwd)/build/Leader Key.app}"
+dest="/Applications/Leader Key.app"
+bundle_id="com.brnbw.Leader-Key"
+process_name="Leader Key"
+
+if [[ ! -d "$app/Contents" ]]; then
+  echo "bin/install: no app bundle at $app" >&2
+  exit 1
+fi
+
+running() {
+  pgrep -x "$process_name" >/dev/null
+}
+
+# Poll until the app has exited; $1 is the number of half-second tries.
+wait_for_exit() {
+  local tries=$1
+  while ((tries-- > 0)); do
+    running || return 0
+    sleep 0.5
+  done
+  return 1
+}
+
+if running; then
+  echo "Quitting Leader Key..."
+  osascript -e "tell application id \"$bundle_id\" to quit" >/dev/null 2>&1 || true
+  if ! wait_for_exit 20; then
+    echo "Leader Key did not quit on request; sending SIGTERM" >&2
+    pkill -x "$process_name" || true
+    if ! wait_for_exit 10; then
+      echo "Leader Key is still running; aborting install" >&2
+      exit 1
+    fi
+  fi
+fi
+
+if [[ -d "$dest" ]]; then
+  backup="$HOME/Library/Caches/LeaderKey/backups/$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$backup"
+  mv "$dest" "$backup/"
+  echo "Backed up previous app to $backup/Leader Key.app"
+fi
+
+ditto "$app" "$dest"
+xattr -dr com.apple.quarantine "$dest" 2>/dev/null || true
+open "$dest"
+echo "Installed $dest"

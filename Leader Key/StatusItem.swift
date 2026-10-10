@@ -1,6 +1,5 @@
 import Cocoa
 import Combine
-import Sparkle
 
 class StatusItem {
   enum Appearance {
@@ -21,7 +20,6 @@ class StatusItem {
   var handleAbout: (() -> Void)?
   var handleReloadConfig: (() -> Void)?
   var handleRevealConfig: (() -> Void)?
-  var handleCheckForUpdates: (() -> Void)?
 
   func enable() {
     statusItem = NSStatusBar.system.statusItem(
@@ -53,15 +51,6 @@ class StatusItem {
       title: "Settings…", action: #selector(showPreferences), keyEquivalent: ",")
     preferencesItem.target = self
     menu.addItem(preferencesItem)
-
-    menu.addItem(NSMenuItem.separator())
-
-    let checkForUpdatesItem = NSMenuItem(
-      title: "Check for Updates...", action: #selector(checkForUpdates),
-      keyEquivalent: ""
-    )
-    checkForUpdatesItem.target = self
-    menu.addItem(checkForUpdatesItem)
 
     menu.addItem(NSMenuItem.separator())
 
@@ -127,10 +116,6 @@ class StatusItem {
 
   @objc func revealConfigFile() {
     handleRevealConfig?()
-  }
-
-  @objc func checkForUpdates() {
-    handleCheckForUpdates?()
   }
 
   private func updateStatusItemAppearance() {

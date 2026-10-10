@@ -6,11 +6,15 @@ This file provides guidance to coding agents when working with code in this repo
 
 ## Build & Test Commands
 
-- Build and run: `xcodebuild -scheme "Leader Key" -configuration Debug build`
+Builds need macOS with Xcode. From a Linux host, copy the tree to mbp16 and build there over SSH.
+
+- Release build, ad-hoc signed, left at `build/Leader Key.app`: `bin/build`
+- Install a build into `/Applications` (quits, backs up, relaunches): `bin/install [APP]`
+- Debug build: `xcodebuild -scheme "Leader Key" -configuration Debug build`
 - Run all tests: `xcodebuild -scheme "Leader Key" -testPlan "TestPlan" test`
 - Run single test: `xcodebuild -scheme "Leader Key" -testPlan "TestPlan" -only-testing:Leader KeyTests/UserConfigTests/testInitializesWithDefaults test`
+- Gate (lint, resolve, test on mbp16; commands in `.agent-gate.json`): `~/fleet/bin/agent-gate run`
 - Bump version: `bin/bump`
-- Create release: `bin/release`
 
 ## Architecture Overview
 
@@ -18,7 +22,7 @@ Leader Key is a macOS application that provides customizable keyboard shortcuts.
 
 **Key Components:**
 
-- `AppDelegate`: Application lifecycle, global shortcuts registration, update management
+- `AppDelegate`: Application lifecycle, global shortcuts registration, URL scheme handling
 - `Controller`: Central event handling, manages key sequences and window display
 - `UserConfig`: JSON configuration management with validation
 - `UserState`: Tracks navigation through key sequences

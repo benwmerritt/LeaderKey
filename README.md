@@ -1,3 +1,9 @@
+# About this fork
+
+This is [benwmerritt](https://github.com/benwmerritt)'s personal build of [mikker/LeaderKey](https://github.com/mikker/LeaderKey): the same app and bundle ID, with Sparkle removed and ad-hoc signing so it builds, tests and installs from the command line (`bin/build`, `bin/install`). There is no release download or update feed for this fork; build it yourself. Everything below is upstream's README.
+
+---
+
 # NB: Leader Key has been surpassed by [Tuna](https://tunaformac.com)
 
 Tuna is a complete launcher – much more capable, and with **Leader Key built in!**

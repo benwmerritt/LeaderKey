@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Release build of Leader Key, ad-hoc signed, left at build/Leader Key.app.
+# Non-interactive: prints the app path on success, exits non-zero on failure.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+derived_data="build/DerivedData"
+app="build/Leader Key.app"
+
+xcodebuild build \
+  -project "Leader Key.xcodeproj" \
+  -scheme "Leader Key" \
+  -configuration Release \
+  -destination "platform=macOS" \
+  -derivedDataPath "$derived_data" \
+  -skipPackagePluginValidation \
+  -skipMacroValidation \
+  -quiet \
+  CODE_SIGN_IDENTITY=-
+
+rm -rf "$app"
+ditto "$derived_data/Build/Products/Release/Leader Key.app" "$app"
+echo "$PWD/$app"
