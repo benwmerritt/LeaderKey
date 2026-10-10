@@ -57,6 +57,14 @@ final class UserConfigTests: XCTestCase {
     super.tearDown()
   }
 
+  func testDefaultDirectoryIsNotTheRealConfigUnderTests() throws {
+    let appSupport = FileManager.default.urls(
+      for: .applicationSupportDirectory, in: .userDomainMask)[0].path
+    XCTAssertFalse(UserConfig.defaultDirectory().hasPrefix(appSupport))
+    XCTAssertTrue(
+      UserConfig.defaultDirectory().hasPrefix(FileManager.default.temporaryDirectory.path))
+  }
+
   func testInitializesWithDefaults() throws {
     subject.ensureAndLoad()
     waitForConfigLoad()

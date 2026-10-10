@@ -179,9 +179,14 @@ class UserConfig: ObservableObject {
   // MARK: - Directory Management
 
   static func defaultDirectory() -> String {
-    let appSupportDir = FileManager.default.urls(
-      for: .applicationSupportDirectory, in: .userDomainMask)[0]
-    let path = (appSupportDir.path as NSString).appendingPathComponent(
+    // Under XCTest the default directory lives in a per-run temporary folder, so tests that
+    // delete or overwrite it never touch the real config in Application Support.
+    let baseDir =
+      ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+      ? FileManager.default.temporaryDirectory.appendingPathComponent(
+        "LeaderKeyTests-\(ProcessInfo.processInfo.processIdentifier)")
+      : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    let path = (baseDir.path as NSString).appendingPathComponent(
       "Leader Key")
     do {
       try FileManager.default.createDirectory(
