@@ -1,0 +1,126 @@
+name: Release
+
+# Tag push (vX.Y.Z): build, sign, appcast, publish a GitHub release.
+# Pull request to main: the same build as a dry run, uploaded as an artifact.
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  SPARKLE_VERSION: "2.8.0"
+  SPARKLE_SHA256: "fd5681ee92bf238aaac2d08214ceaf0cc8976e452d7f882d80bac1e61581f3b1"
+
+jobs:
+  build:
+    name: Build and sign
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the build number is the commit count
+
+      - name: Check for signing secrets
+        id: secrets
+        env:
+          P12_BASE64: ${{ secrets.MACOS_SIGNING_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.MACOS_SIGNING_P12_PASSWORD }}
+          ED_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          if [ -n "$P12_BASE64" ] && [ -n "$P12_PASSWORD" ] && [ -n "$ED_KEY" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          elif [ "$GITHUB_REF_TYPE" = tag ]; then
+            echo "::error::signing secrets are missing, so the tag cannot be released"
+            exit 1
+          else
+            echo "::notice::signing secrets are unavailable here (fork PR?), skipping the release dry run"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve version
+        id: version
+        if: steps.secrets.outputs.available == 'true'
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            version="${GITHUB_REF_NAME#v}"
+            if ! echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::tag $GITHUB_REF_NAME is not vX.Y.Z"
+              exit 1
+            fi
+            echo "marketing_version=$version" >> "$GITHUB_OUTPUT"
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            echo "marketing_version=" >> "$GITHUB_OUTPUT"
+            echo "tag=v0.0.0-dry-run" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and sign
+        if: steps.secrets.outputs.available == 'true'
+        env:
+          P12_BASE64: ${{ secrets.MACOS_SIGNING_P12_BASE64 }}
+          SIGNING_P12_PASSWORD: ${{ secrets.MACOS_SIGNING_P12_PASSWORD }}
+          MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
+        run: |
+          umask 077
+          export SIGNING_P12="$RUNNER_TEMP/signing.p12"
+          trap 'rm -f "$SIGNING_P12"' EXIT
+          printf '%s' "$P12_BASE64" | base64 --decode > "$SIGNING_P12"
+          bin/release-build
+
+      - name: Generate appcast
+        if: steps.secrets.outputs.available == 'true'
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          DOWNLOAD_URL_PREFIX: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/
+        run: |
+          sparkle="$RUNNER_TEMP/sparkle"
+          mkdir -p "$sparkle"
+          curl -fsSL -o "$sparkle.tar.xz" \
+            "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz"
+          echo "$SPARKLE_SHA256  $sparkle.tar.xz" | shasum -a 256 -c -
+          tar -xJf "$sparkle.tar.xz" -C "$sparkle"
+          # generate_appcast signs every archive in the folder, so give it only this release.
+          mkdir -p build/appcast
+          cp build/release/Leader-Key-*.zip build/appcast/
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$sparkle/bin/generate_appcast" \
+            --ed-key-file - \
+            --download-url-prefix "$DOWNLOAD_URL_PREFIX" \
+            -o build/release/appcast.xml \
+            build/appcast
+          grep -q 'sparkle:edSignature=' build/release/appcast.xml
+
+      - uses: actions/upload-artifact@v4
+        if: steps.secrets.outputs.available == 'true'
+        with:
+          name: release
+          path: |
+            build/release/Leader-Key-*.zip
+            build/release/appcast.xml
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: release
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/Leader-Key-*.zip release/appcast.xml \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --generate-notes
