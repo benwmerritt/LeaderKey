@@ -5,6 +5,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Works where only the Command Line Tools are selected (mba13) as well as where Xcode is.
+export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+
 derived_data="build/DerivedData"
 app="build/Leader Key.app"
 
