@@ -8,7 +8,11 @@ set -euo pipefail
 app="${1:-$(cd "$(dirname "$0")/.." && pwd)/build/Leader Key.app}"
 dest="/Applications/Leader Key.app"
 bundle_id="com.brnbw.Leader-Key"
-process_name="Leader Key"
+# pgrep/pkill -f pattern for this user's copy running from $dest, so test hosts
+# in DerivedData and other users' copies are left alone.
+executable="$dest/Contents/MacOS/Leader Key"
+process_pattern="^${executable//./[.]}( |\$)"
+uid="$(id -u)"
 
 if [[ ! -d "$app/Contents" ]]; then
   echo "bin/install: no app bundle at $app" >&2
@@ -16,7 +20,7 @@ if [[ ! -d "$app/Contents" ]]; then
 fi
 
 running() {
-  pgrep -x "$process_name" >/dev/null
+  pgrep -u "$uid" -f "$process_pattern" >/dev/null
 }
 
 # Poll until the app has exited; $1 is the number of half-second tries.
@@ -29,12 +33,26 @@ wait_for_exit() {
   return 1
 }
 
+# Ask the app to quit. Over SSH, osascript can block for minutes on an
+# Automation consent prompt nobody can answer, so it gets 5 seconds.
+request_quit() {
+  osascript -e "tell application id \"$bundle_id\" to quit" >/dev/null 2>&1 &
+  local pid=$! tries=10
+  while ((tries-- > 0)) && kill -0 "$pid" 2>/dev/null; do
+    sleep 0.5
+  done
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+
+was_running=false
 if running; then
+  was_running=true
   echo "Quitting Leader Key..."
-  osascript -e "tell application id \"$bundle_id\" to quit" >/dev/null 2>&1 || true
+  request_quit
   if ! wait_for_exit 20; then
     echo "Leader Key did not quit on request; sending SIGTERM" >&2
-    pkill -x "$process_name" || true
+    pkill -u "$uid" -f "$process_pattern" || true
     if ! wait_for_exit 10; then
       echo "Leader Key is still running; aborting install" >&2
       exit 1
@@ -42,6 +60,7 @@ if running; then
   fi
 fi
 
+backup=""
 if [[ -d "$dest" ]]; then
   backup="$HOME/Library/Caches/LeaderKey/backups/$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$backup"
@@ -49,7 +68,18 @@ if [[ -d "$dest" ]]; then
   echo "Backed up previous app to $backup/Leader Key.app"
 fi
 
-ditto "$app" "$dest"
+if ! ditto "$app" "$dest"; then
+  echo "bin/install: copying $app to $dest failed" >&2
+  if [[ -n "$backup" ]]; then
+    rm -rf "$dest"
+    mv "$backup/Leader Key.app" "$dest"
+    echo "Restored the previous app to $dest" >&2
+    if $was_running; then
+      open "$dest"
+    fi
+  fi
+  exit 1
+fi
 xattr -dr com.apple.quarantine "$dest" 2>/dev/null || true
 open "$dest"
 echo "Installed $dest"

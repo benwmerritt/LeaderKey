@@ -1,7 +1,7 @@
 {
   "host": "mbp16",
   "commands": [
-    "xcrun swift-format lint --strict --recursive .",
+    "xcrun swift-format lint --strict --recursive \"Leader Key\" \"Leader KeyTests\"",
     "xcodebuild -resolvePackageDependencies -project \"Leader Key.xcodeproj\" -scheme \"Leader Key\" -derivedDataPath build/DerivedData",
     "xcodebuild test -project \"Leader Key.xcodeproj\" -scheme \"Leader Key\" -destination \"platform=macOS\" -testPlan TestPlan -skipPackagePluginValidation -skipMacroValidation -derivedDataPath build/DerivedData CODE_SIGN_IDENTITY=-"
   ]

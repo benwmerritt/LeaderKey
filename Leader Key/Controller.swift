@@ -164,6 +164,7 @@ class Controller {
 
     switch hit {
     case .action(let action):
+      // If execute is false, just stay visible showing the matched action
       if execute {
         if let mods = modifiers, isInStickyMode(mods) {
           runAction(action)
@@ -173,7 +174,6 @@ class Controller {
           }
         }
       }
-    // If execute is false, just stay visible showing the matched action
     case .group(let group):
       if execute, let mods = modifiers, shouldRunGroupSequenceWithModifiers(mods) {
         let actionCount = countActionsInGroup(group)

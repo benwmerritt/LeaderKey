@@ -6,14 +6,12 @@ This file provides guidance to coding agents when working with code in this repo
 
 ## Build & Test Commands
 
-Builds need macOS with Xcode. From a Linux host, copy the tree to mbp16 and build there over SSH.
+Builds and tests need macOS with Xcode. From a Linux host, test through the gate, which runs on mbp16.
 
 - Release build, ad-hoc signed, left at `build/Leader Key.app`: `bin/build`
 - Install a build into `/Applications` (quits, backs up, relaunches): `bin/install [APP]`
-- Debug build: `xcodebuild -scheme "Leader Key" -configuration Debug build`
-- Run all tests: `xcodebuild -scheme "Leader Key" -testPlan "TestPlan" test`
-- Run single test: `xcodebuild -scheme "Leader Key" -testPlan "TestPlan" -only-testing:Leader KeyTests/UserConfigTests/testInitializesWithDefaults test`
-- Gate (lint, resolve, test on mbp16; commands in `.agent-gate.json`): `~/fleet/bin/agent-gate run`
+- Lint and run every test: `~/fleet/bin/agent-gate run`. It runs the commands in `.agent-gate.json` on mbp16 against the committed HEAD, so commit first: it refuses a tree with uncommitted or untracked files. Passed when it exits 0 and prints `checks passed`.
+- Run one test, on a Mac: the `xcodebuild test` command in `.agent-gate.json` plus `-only-testing:"Leader KeyTests/UserConfigTests/testInitializesWithDefaults"`
 - Bump version: `bin/bump`
 
 ## Architecture Overview
@@ -49,7 +47,6 @@ Leader Key is a macOS application that provides customizable keyboard shortcuts.
 
 ## Code Style Guidelines
 
-- **Imports**: Group Foundation/AppKit imports first, then third-party libraries (Combine, Defaults)
 - **Naming**: Use descriptive camelCase for variables/functions, PascalCase for types
 - **Types**: Use explicit type annotations for public properties and parameters
 - **Error Handling**: Use appropriate error handling with do/catch blocks and alerts
@@ -59,5 +56,5 @@ Leader Key is a macOS application that provides customizable keyboard shortcuts.
 - **Access Control**: Use appropriate access modifiers (private, fileprivate, internal)
 - **Documentation**: Use comments for complex logic or non-obvious implementations
 
-Follow Swift idioms and default formatting (4-space indentation, spaces around operators).
+Formatting belongs to swift-format's defaults (2-space indentation, alphabetically sorted imports, 100-column lines): the `Format` build phase applies them to `Leader Key` and `Leader KeyTests` on every build, and the gate lints with `--strict`.
 
