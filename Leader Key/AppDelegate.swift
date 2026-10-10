@@ -20,7 +20,7 @@ class AppDelegate: NSObject, NSApplicationDelegate,
   let config = UserConfig()
 
   var state: UserState!
-  @IBOutlet var updaterController: SPUStandardUpdaterController!
+  var updaterController: SPUStandardUpdaterController!
 
   lazy var settingsWindowController = SettingsWindowController(
     panes: [
@@ -45,6 +45,11 @@ class AppDelegate: NSObject, NSApplicationDelegate,
       ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1"
     else { return }
     guard !isRunningTests() else { return }
+
+    // Created here rather than in the storyboard, which would start it as the nib loads,
+    // so a test run never checks for or installs updates.
+    updaterController = SPUStandardUpdaterController(
+      startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
     UNUserNotificationCenter.current().delegate = self
 
