@@ -168,6 +168,58 @@ final class UserConfigTests: XCTestCase {
     XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
   }
 
+  func testBootstrapThroughDanglingRelativeSymlinkKeepsLink() throws {
+    let destination = "dotfiles/nested/config.json"
+    let target = tempBaseDir.appending("/" + destination)
+    try FileManager.default.createSymbolicLink(
+      atPath: subject.path, withDestinationPath: destination)
+
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+
+    XCTAssertTrue(isSymlink(subject.path))
+    XCTAssertEqual(
+      try FileManager.default.destinationOfSymbolicLink(atPath: subject.path), destination)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: target))
+    XCTAssertNotEqual(subject.root, emptyRoot)
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  func testSavingThroughDanglingRelativeSymlinkKeepsLink() throws {
+    let target = try makeSymlinkedConfig()
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    try FileManager.default.removeItem(atPath: target)
+
+    subject.saveConfig()
+
+    XCTAssertTrue(isSymlink(subject.path))
+    XCTAssertEqual(savedKeys(at: target), ["a"])
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  func testBootstrapAndSaveThroughTwoRelativeSymlinks() throws {
+    let intermediate = tempBaseDir.appending("/links/config.json")
+    let target = tempBaseDir.appending("/dotfiles/nested/config.json")
+    try FileManager.default.createDirectory(
+      atPath: tempBaseDir.appending("/links"), withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(
+      atPath: subject.path, withDestinationPath: "links/config.json")
+    try FileManager.default.createSymbolicLink(
+      atPath: intermediate, withDestinationPath: "../dotfiles/nested/config.json")
+
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    XCTAssertTrue(FileManager.default.fileExists(atPath: target))
+    subject.root = Group(key: nil, actions: [addedAction])
+    subject.saveConfig()
+
+    XCTAssertTrue(isSymlink(subject.path))
+    XCTAssertTrue(isSymlink(intermediate))
+    XCTAssertEqual(savedKeys(at: target), ["z"])
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
   func testDetectsExternalChangeThroughSymlink() throws {
     let target = try makeSymlinkedConfig()
 

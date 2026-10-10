@@ -247,10 +247,56 @@ class UserConfig: ObservableObject {
   }
 
   private func writeFile(data: Data) throws {
-    // An atomic write renames a temporary file over its destination, so writing to a
-    // symlinked config.json would replace the link with a plain file. Writing to the
-    // resolved target keeps the link (and whatever manages it) in place.
-    try data.write(to: url.resolvingSymlinksInPath(), options: .atomic)
+    let target = try configWriteTarget()
+    try fileManager.createDirectory(
+      at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try data.write(to: target, options: .atomic)
+  }
+
+  private func configWriteTarget() throws -> URL {
+    // Resolve each component explicitly: Foundation leaves dangling links unresolved,
+    // and an atomic write to an unresolved link would replace it.
+    var components = Array(url.pathComponents.dropFirst())
+    var target = URL(fileURLWithPath: "/", isDirectory: true)
+    var linksFollowed = 0
+    while !components.isEmpty {
+      let component = components.removeFirst()
+      if component == "." { continue }
+      if component == ".." {
+        target.deleteLastPathComponent()
+        continue
+      }
+      let candidate = target.appendingPathComponent(component)
+      let attributes: [FileAttributeKey: Any]
+      do {
+        attributes = try fileManager.attributesOfItem(atPath: candidate.path)
+      } catch let error as NSError
+        where error.domain == NSCocoaErrorDomain
+        && (error.code == NSFileNoSuchFileError || error.code == NSFileReadNoSuchFileError)
+      {
+        target = candidate
+        continue
+      }
+      if attributes[.type] as? FileAttributeType == .typeSymbolicLink {
+        linksFollowed += 1
+        guard linksFollowed <= 40 else {
+          throw NSError(
+            domain: "UserConfig", code: 2,
+            userInfo: [NSLocalizedDescriptionKey: "Too many symbolic links in config path"])
+        }
+        let destination = try fileManager.destinationOfSymbolicLink(atPath: candidate.path)
+        let destinationComponents = (destination as NSString).pathComponents
+        if (destination as NSString).isAbsolutePath {
+          target = URL(fileURLWithPath: "/", isDirectory: true)
+          components = Array(destinationComponents.dropFirst()) + components
+        } else {
+          components = destinationComponents + components
+        }
+      } else {
+        target = candidate
+      }
+    }
+    return target
   }
 
   private func readFile() throws -> String {

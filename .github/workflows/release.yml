@@ -105,6 +105,8 @@ jobs:
 
       - name: Check the tag
         id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           version="${GITHUB_REF_NAME#v}"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -119,6 +121,27 @@ jobs:
           fi
           if ! git merge-base --is-ancestor HEAD origin/main; then
             echo "::error::$GITHUB_REF_NAME is not on main; tag a commit from main's history"
+            exit 1
+          fi
+          build_number="$(git rev-list --count HEAD)"
+          # Only a missing release (HTTP 404) permits the first release. Authentication
+          # and other API failures must not silently bypass the monotonicity check.
+          latest_error="$(mktemp)"
+          if latest_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>"$latest_error")"; then
+            rm -f "$latest_error"
+            git fetch origin "refs/tags/$latest_tag"
+            latest_build_number="$(git rev-list --count 'FETCH_HEAD^{commit}')"
+            if ((build_number <= latest_build_number)); then
+              echo "::error::tag $GITHUB_REF_NAME build number $build_number must be greater than latest release $latest_tag build number $latest_build_number"
+              exit 1
+            fi
+          elif [[ "$(cat "$latest_error")" == *"(HTTP 404)"* ]]; then
+            rm -f "$latest_error"
+            echo "No published release yet; allowing build number $build_number"
+          else
+            cat "$latest_error" >&2
+            rm -f "$latest_error"
+            echo "::error::could not determine the latest published release"
             exit 1
           fi
           echo "marketing_version=$version" >>"$GITHUB_OUTPUT"

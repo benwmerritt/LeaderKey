@@ -108,8 +108,8 @@ if ! ditto "$app" "$dest"; then
   echo "bin/install: copying $app to $dest failed" >&2
   exit 1
 fi
-installed=true
 
 xattr -dr com.apple.quarantine "$dest" 2>/dev/null || true
 open "$dest"
+installed=true
 echo "Installed $dest"
