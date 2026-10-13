@@ -6,11 +6,20 @@ This file provides guidance to coding agents when working with code in this repo
 
 ## Build & Test Commands
 
-- Build and run: `xcodebuild -scheme "Leader Key" -configuration Debug build`
-- Run all tests: `xcodebuild -scheme "Leader Key" -testPlan "TestPlan" test`
-- Run single test: `xcodebuild -scheme "Leader Key" -testPlan "TestPlan" -only-testing:Leader KeyTests/UserConfigTests/testInitializesWithDefaults test`
-- Bump version: `bin/bump`
-- Create release: `bin/release`
+Builds and tests need macOS with Xcode. Edit on agentmini; build and test on mba13 over SSH. mba13 has the Command Line Tools selected, not Xcode, so the scripts and the gate default `DEVELOPER_DIR` to `/Applications/Xcode.app/Contents/Developer`; set it yourself for any other `xcodebuild` call there. For script smoke tests, rsync the tree into a `mktemp -d` on mba13 and run there.
+
+- Lint and run every test: `~/fleet/bin/agent-gate run`. It runs the commands in `.agent-gate.json` on mba13 against the committed HEAD, so commit first: it refuses a tree with uncommitted or untracked files. Passed when it exits 0 and prints `checks passed`.
+- Run one test, on a Mac: the `xcodebuild test` command in `.agent-gate.json` plus `-only-testing:"Leader KeyTests/UserConfigTests/testInitializesWithDefaults"`
+- Release build, ad-hoc signed, left at `build/Leader Key.app`: `bin/build`. Like a release's, its build number is the commit count, which is what Sparkle compares to decide whether a release is newer.
+- Signed release build exactly as CI makes it, left at `build/release/Leader-Key-<version>.zip`: `SIGNING_P12=<path> SIGNING_P12_PASSWORD="$(cat <password file>)" bin/release-build`, reading the password from a file so that no command line carries it. The `.p12` and its password live outside the repository. A change to `bin/release-build`, `bin/release-appcast`, `signing/` or `.github/workflows/release.yml` gets this smoke test on mba13 before it ships.
+- Install a build into `/Applications` (quits, backs up, relaunches): `bin/install [APP]`. To bootstrap a Mac, `scp` the `.app` and the script there and run it over SSH: scp sets no quarantine flag, so Gatekeeper never sees the unnotarised app.
+
+## Releases
+
+Tag a commit on `main` as `vX.Y.Z` and push the tag. `.github/workflows/release.yml` builds and signs the app on a GitHub macOS runner, generates `appcast.xml`, and publishes a GitHub release holding the zip and the appcast. A tag outside `main`'s history fails the run, because the build number is the commit count and must only grow. Sparkle on the Macs reads `releases/latest/download/appcast.xml`, downloads a new release in the background, and installs it by relaunching Leader Key once the panel and Settings are closed, or at quit. On every pull request to `main` the same build and appcast run as a dry run, signed with a throwaway certificate and Sparkle key made in the job, and land in a workflow artifact instead of a release.
+
+- Signing uses a self-signed certificate: no Apple Developer account, no notarisation. The project stays ad-hoc so anyone can build; only `bin/release-build` applies the certificate. `signing/designated-requirement.txt` pins the signature's designated requirement, which is what lets macOS permissions survive updates; a different certificate gives a different requirement and the script fails instead of shipping it.
+- The signing secrets live in the `release` GitHub environment, which only `v*` tags may use, so pull-request runs never see them. The Sparkle key's public half is `SUPublicEDKey` in `Leader Key/Support/Info.plist`.
 
 ## Architecture Overview
 
@@ -18,7 +27,7 @@ Leader Key is a macOS application that provides customizable keyboard shortcuts.
 
 **Key Components:**
 
-- `AppDelegate`: Application lifecycle, global shortcuts registration, update management
+- `AppDelegate`: Application lifecycle, global shortcuts registration, URL scheme handling, the Sparkle updater
 - `Controller`: Central event handling, manages key sequences and window display
 - `UserConfig`: JSON configuration management with validation
 - `UserState`: Tracks navigation through key sequences
@@ -27,13 +36,13 @@ Leader Key is a macOS application that provides customizable keyboard shortcuts.
 **Theme System:**
 
 - Themes inherit from `MainWindow` and implement `draw()` method
-- Available themes: MysteryBox, Mini, Breadcrumbs, ForTheHorde, Cheater
+- Available themes: Mini, Cheater
 - Each theme provides different visual representations of shortcuts
 
 **Configuration Flow:**
 
-- Config stored at `~/Library/Application Support/Leader Key/config.json`
-- `FileMonitor` watches for changes and triggers reload
+- Config stored at `~/Library/Application Support/Leader Key/config.json`; a symlink there is written through, so a dotfiles manager can own the file
+- Config reloads only on request: the menu-bar "Reload config" item, the Settings "Read from file" button, `leaderkey://config-reload`, and the save-conflict alert's "Read from File". Nothing watches the file
 - `ConfigValidator` ensures no key conflicts
 - Actions support: applications, URLs, commands, folders
 
@@ -45,7 +54,6 @@ Leader Key is a macOS application that provides customizable keyboard shortcuts.
 
 ## Code Style Guidelines
 
-- **Imports**: Group Foundation/AppKit imports first, then third-party libraries (Combine, Defaults)
 - **Naming**: Use descriptive camelCase for variables/functions, PascalCase for types
 - **Types**: Use explicit type annotations for public properties and parameters
 - **Error Handling**: Use appropriate error handling with do/catch blocks and alerts
@@ -55,5 +63,4 @@ Leader Key is a macOS application that provides customizable keyboard shortcuts.
 - **Access Control**: Use appropriate access modifiers (private, fileprivate, internal)
 - **Documentation**: Use comments for complex logic or non-obvious implementations
 
-Follow Swift idioms and default formatting (4-space indentation, spaces around operators).
-
+Formatting belongs to swift-format's defaults (2-space indentation, alphabetically sorted imports, 100-column lines): the `Format` build phase applies them to `Leader Key` and `Leader KeyTests` on every build, and the gate lints with `--strict`.

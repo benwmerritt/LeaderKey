@@ -1,0 +1,1 @@
+designated => identifier "com.brnbw.Leader-Key" and certificate leaf = H"4159da3fbef7479b9337643e05a13a6258830b92"

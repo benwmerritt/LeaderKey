@@ -130,7 +130,9 @@ class Controller {
     }
   }
 
-  func handleKey(_ key: String, withModifiers modifiers: NSEvent.ModifierFlags? = nil, execute: Bool = true) {
+  func handleKey(
+    _ key: String, withModifiers modifiers: NSEvent.ModifierFlags? = nil, execute: Bool = true
+  ) {
     if key == "?" {
       showCheatsheet()
       return
@@ -162,6 +164,7 @@ class Controller {
 
     switch hit {
     case .action(let action):
+      // If execute is false, just stay visible showing the matched action
       if execute {
         if let mods = modifiers, isInStickyMode(mods) {
           runAction(action)
@@ -171,24 +174,9 @@ class Controller {
           }
         }
       }
-      // If execute is false, just stay visible showing the matched action
     case .group(let group):
-      if execute, let mods = modifiers, shouldRunGroupSequenceWithModifiers(mods) {
-        let actionCount = countActionsInGroup(group)
-        let threshold = Defaults[.groupActionThreshold]
-
-        if threshold > 0 && actionCount > threshold {
-          // Show warning instead of executing
-          showGroupThresholdWarning(group: group, actionCount: actionCount)
-        } else {
-          hide {
-            self.runGroup(group)
-          }
-        }
-      } else {
-        userState.display = group.key
-        userState.navigateToGroup(group)
-      }
+      userState.display = group.key
+      userState.navigateToGroup(group)
     case .none:
       window.notFound()
     }
@@ -199,42 +187,12 @@ class Controller {
     }
   }
 
-  private func shouldRunGroupSequence(_ event: NSEvent) -> Bool {
-    return shouldRunGroupSequenceWithModifiers(event.modifierFlags)
-  }
-
-  private func shouldRunGroupSequenceWithModifiers(_ modifierFlags: NSEvent.ModifierFlags) -> Bool {
-    let config = Defaults[.modifierKeyConfiguration]
-
-    switch config {
-    case .controlGroupOptionSticky:
-      return modifierFlags.contains(.control)
-    case .optionGroupControlSticky:
-      return modifierFlags.contains(.option)
-    }
-  }
-
   private func isInStickyMode(_ modifierFlags: NSEvent.ModifierFlags) -> Bool {
-    let config = Defaults[.modifierKeyConfiguration]
-
-    switch config {
-    case .controlGroupOptionSticky:
-      return modifierFlags.contains(.option)
-    case .optionGroupControlSticky:
-      return modifierFlags.contains(.control)
-    }
+    return modifierFlags.contains(Defaults[.stickyModeModifier].modifierFlag)
   }
 
   internal func charForEvent(_ event: NSEvent) -> String? {
-    let forceEnglish = Defaults[.forceEnglishKeyboardLayout]
-
-    // 1. If the user forces English, or if the key is non-printable,
-    //    fall back to the hard-coded map.
-    if forceEnglish {
-      return englishGlyph(for: event)
-    }
-
-    // 2. For special keys like Enter, always use the mapped glyph
+    // 1. For special keys like Enter, always use the mapped glyph
     if let entry = KeyMaps.entry(for: event.keyCode) {
       // For Enter, Space, Tab, arrows, etc. - use the glyph representation
       if event.keyCode == KeyHelpers.enter.rawValue || event.keyCode == KeyHelpers.space.rawValue
@@ -248,7 +206,7 @@ class Controller {
       }
     }
 
-    // 3. Use the system-translated character for regular keys.
+    // 2. Use the system-translated character for regular keys.
     if let printable = event.charactersIgnoringModifiers,
       !printable.isEmpty,
       printable.unicodeScalars.first?.isASCII ?? false
@@ -256,7 +214,7 @@ class Controller {
       return printable  // already contains correct case
     }
 
-    // 4. For arrows, ␣, ⌫ … use map as last resort.
+    // 3. For arrows, ␣, ⌫ … use map as last resort.
     return englishGlyph(for: event)
   }
 
@@ -297,43 +255,6 @@ class Controller {
     ) { [weak self] _ in
       self?.showCheatsheet()
     }
-  }
-
-  private func runGroup(_ group: Group) {
-    for groupOrAction in group.actions {
-      switch groupOrAction {
-      case .group(let group):
-        runGroup(group)
-      case .action(let action):
-        runAction(action)
-      }
-    }
-  }
-
-  private func countActionsInGroup(_ group: Group) -> Int {
-    var count = 0
-    for item in group.actions {
-      switch item {
-      case .group(let subgroup):
-        count += countActionsInGroup(subgroup)
-      case .action:
-        count += 1
-      }
-    }
-    return count
-  }
-
-  private func showGroupThresholdWarning(group: Group, actionCount: Int) {
-    let threshold = Defaults[.groupActionThreshold]
-    let alert = NSAlert()
-    alert.messageText = "Too many actions to run at once"
-    alert.informativeText = "The group '\(group.label ?? group.key)' contains \(actionCount) actions, which exceeds the safety threshold of \(threshold). You can adjust this limit in Settings > Advanced."
-    alert.alertStyle = .warning
-    alert.addButton(withTitle: "OK")
-    alert.runModal()
-
-    // Keep window visible for user to navigate normally
-    window.makeKeyAndOrderFront(nil)
   }
 
   private func runAction(_ action: Action) {

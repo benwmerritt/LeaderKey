@@ -68,10 +68,10 @@ enum Mini {
   }
 }
 
-struct Invisible_MainView_Previews: PreviewProvider {
+struct MiniMainView_Previews: PreviewProvider {
   static var previews: some View {
     VStack {
-      MysteryBox.MainView().environmentObject(
+      Mini.MainView().environmentObject(
         UserState(userConfig: UserConfig()))
     }.frame(width: Mini.size, height: Mini.size, alignment: .center)
   }

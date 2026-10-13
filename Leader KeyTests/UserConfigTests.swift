@@ -57,6 +57,14 @@ final class UserConfigTests: XCTestCase {
     super.tearDown()
   }
 
+  func testDefaultDirectoryIsNotTheRealConfigUnderTests() throws {
+    let appSupport = FileManager.default.urls(
+      for: .applicationSupportDirectory, in: .userDomainMask)[0].path
+    XCTAssertFalse(UserConfig.defaultDirectory().hasPrefix(appSupport))
+    XCTAssertTrue(
+      UserConfig.defaultDirectory().hasPrefix(FileManager.default.temporaryDirectory.path))
+  }
+
   func testInitializesWithDefaults() throws {
     subject.ensureAndLoad()
     waitForConfigLoad()
@@ -142,11 +150,169 @@ final class UserConfigTests: XCTestCase {
     XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
   }
 
-  private func waitForConfigLoad() {
-    let expectation = expectation(description: "config load flush")
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-      expectation.fulfill()
+  // MARK: - Symlinked config
+
+  func testSavingThroughSymlinkKeepsLinkAndUpdatesTarget() throws {
+    let target = try makeSymlinkedConfig()
+
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    XCTAssertEqual(subject.root.actions.count, 1)
+
+    subject.root.actions.append(addedAction)
+    // Editing `root` saves after a 300 ms debounce, writing on a background queue.
+    waitUntil("the debounced save") { self.savedKeys(at: target) == ["a", "z"] }
+
+    XCTAssertTrue(isSymlink(subject.path), "save replaced the symlink with a plain file")
+    XCTAssertEqual(savedKeys(at: target), ["a", "z"])
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  func testBootstrapThroughDanglingRelativeSymlinkKeepsLink() throws {
+    let destination = "dotfiles/nested/config.json"
+    let target = tempBaseDir.appending("/" + destination)
+    try FileManager.default.createSymbolicLink(
+      atPath: subject.path, withDestinationPath: destination)
+
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+
+    XCTAssertTrue(isSymlink(subject.path))
+    XCTAssertEqual(
+      try FileManager.default.destinationOfSymbolicLink(atPath: subject.path), destination)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: target))
+    XCTAssertNotEqual(subject.root, emptyRoot)
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  func testSavingThroughDanglingRelativeSymlinkKeepsLink() throws {
+    let target = try makeSymlinkedConfig()
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    try FileManager.default.removeItem(atPath: target)
+
+    subject.saveConfig()
+
+    XCTAssertTrue(isSymlink(subject.path))
+    XCTAssertEqual(savedKeys(at: target), ["a"])
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  func testBootstrapAndSaveThroughTwoRelativeSymlinks() throws {
+    let intermediate = tempBaseDir.appending("/links/config.json")
+    let target = tempBaseDir.appending("/dotfiles/nested/config.json")
+    try FileManager.default.createDirectory(
+      atPath: tempBaseDir.appending("/links"), withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(
+      atPath: subject.path, withDestinationPath: "links/config.json")
+    try FileManager.default.createSymbolicLink(
+      atPath: intermediate, withDestinationPath: "../dotfiles/nested/config.json")
+
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    XCTAssertTrue(FileManager.default.fileExists(atPath: target))
+    subject.root = Group(key: nil, actions: [addedAction])
+    subject.saveConfig()
+
+    XCTAssertTrue(isSymlink(subject.path))
+    XCTAssertTrue(isSymlink(intermediate))
+    XCTAssertEqual(savedKeys(at: target), ["z"])
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  func testDetectsExternalChangeThroughSymlink() throws {
+    let target = try makeSymlinkedConfig()
+
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+
+    try externalConfig.write(toFile: target, atomically: true, encoding: .utf8)
+    subject.saveConfig()
+
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 1)
+    XCTAssertTrue(testAlertManager.shownAlerts[0].message.contains("changed on disk"))
+    // TestAlertManager answers "Overwrite", so the save goes ahead, through the link.
+    XCTAssertTrue(isSymlink(subject.path))
+    XCTAssertEqual(savedKeys(at: target), ["a"])
+  }
+
+  func testSavingPlainFileStaysPlainFile() throws {
+    try initialConfig.write(toFile: subject.path, atomically: true, encoding: .utf8)
+
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+
+    subject.root.actions.append(addedAction)
+    waitUntil("the debounced save") { self.savedKeys(at: self.subject.path) == ["a", "z"] }
+
+    XCTAssertFalse(isSymlink(subject.path))
+    XCTAssertEqual(savedKeys(at: subject.path), ["a", "z"])
+
+    try externalConfig.write(toFile: subject.path, atomically: true, encoding: .utf8)
+    subject.saveConfig()
+
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 1)
+    XCTAssertTrue(testAlertManager.shownAlerts[0].message.contains("changed on disk"))
+  }
+
+  private let initialConfig = """
+    {
+      "actions": [{ "key": "a", "type": "url", "value": "https://a.example" }]
     }
-    self.wait(for: [expectation], timeout: 1.0)
+    """
+  private let externalConfig = """
+    {
+      "actions": [{ "key": "b", "type": "url", "value": "https://b.example" }]
+    }
+    """
+  private let addedAction = ActionOrGroup.action(
+    Action(key: "z", type: .url, value: "https://z.example"))
+
+  /// Writes `initialConfig` to `<temp>/dotfiles/config.json` and points `<temp>/config.json`
+  /// at it through a relative symlink, the shape stow and similar tools produce.
+  /// Returns the target's path.
+  private func makeSymlinkedConfig() throws -> String {
+    let fileManager = FileManager.default
+    let targetDir = tempBaseDir.appending("/dotfiles")
+    try fileManager.createDirectory(atPath: targetDir, withIntermediateDirectories: true)
+    let target = targetDir.appending("/config.json")
+    try initialConfig.write(toFile: target, atomically: true, encoding: .utf8)
+    try fileManager.createSymbolicLink(
+      atPath: subject.path, withDestinationPath: "dotfiles/config.json")
+    return target
+  }
+
+  private func isSymlink(_ path: String) -> Bool {
+    let attributes = try? FileManager.default.attributesOfItem(atPath: path)
+    return attributes?[.type] as? FileAttributeType == .typeSymbolicLink
+  }
+
+  /// The top-level keys in the config file at `path`, in file order.
+  private func savedKeys(at path: String) -> [String] {
+    guard let data = FileManager.default.contents(atPath: path),
+      let group = try? JSONDecoder().decode(Group.self, from: data)
+    else { return [] }
+    return group.actions.compactMap { $0.item.key }
+  }
+
+  /// Loading decodes on a background queue and publishes `root` on the main queue.
+  private func waitForConfigLoad() {
+    waitUntil("the config to load") { !self.subject.isLoading }
+  }
+
+  /// Spins the main run loop, so queued main-queue work runs, until `condition` holds.
+  private func waitUntil(
+    _ description: String, timeout: TimeInterval = 5,
+    file: StaticString = #filePath, line: UInt = #line,
+    _ condition: () -> Bool
+  ) {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !condition() {
+      guard Date() < deadline else {
+        XCTFail("timed out waiting for \(description)", file: file, line: line)
+        return
+      }
+      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
   }
 }

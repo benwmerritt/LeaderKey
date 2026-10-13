@@ -1,0 +1,8 @@
+{
+  "host": "mba13",
+  "commands": [
+    "export DEVELOPER_DIR=\"${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}\"; xcrun swift-format lint --strict --recursive \"Leader Key\" \"Leader KeyTests\"",
+    "export DEVELOPER_DIR=\"${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}\"; xcodebuild -resolvePackageDependencies -project \"Leader Key.xcodeproj\" -scheme \"Leader Key\" -derivedDataPath build/DerivedData",
+    "export DEVELOPER_DIR=\"${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}\"; xcodebuild test -project \"Leader Key.xcodeproj\" -scheme \"Leader Key\" -destination \"platform=macOS\" -testPlan TestPlan -skipPackagePluginValidation -skipMacroValidation -derivedDataPath build/DerivedData CODE_SIGN_IDENTITY=-"
+  ]
+}

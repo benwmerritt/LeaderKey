@@ -1,0 +1,197 @@
+name: Release
+
+# Tag push (vX.Y.Z): build, sign, appcast, publish a GitHub release. The signing
+# secrets live in the `release` environment, which only v* tags may use.
+# Pull request to main: the same build and appcast as a dry run, signed with a
+# throwaway certificate and Sparkle key made in the job, uploaded as an artifact.
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  dry-run:
+    name: Dry run with throwaway keys
+    if: github.event_name == 'pull_request'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # the build number is the commit count
+          persist-credentials: false
+
+      - name: Make a throwaway certificate and Sparkle key
+        run: |
+          dir="$RUNNER_TEMP/throwaway"
+          mkdir -m 700 "$dir"
+          cat >"$dir/certificate.cnf" <<'EOF'
+          [req]
+          distinguished_name = subject
+          prompt = no
+          [subject]
+          CN = Leader Key dry run
+          [codesigning]
+          basicConstraints = critical, CA:false
+          keyUsage = critical, digitalSignature
+          extendedKeyUsage = critical, codeSigning
+          EOF
+          /usr/bin/openssl req -x509 -new -newkey rsa:3072 -nodes -days 2 \
+            -config "$dir/certificate.cnf" -extensions codesigning \
+            -keyout "$dir/key.pem" -out "$dir/cert.pem" 2>/dev/null
+          password="$(/usr/bin/openssl rand -hex 32)"
+          echo "::add-mask::$password"
+          P12_PASSWORD="$password" /usr/bin/openssl pkcs12 -export \
+            -inkey "$dir/key.pem" -in "$dir/cert.pem" -out "$dir/signing.p12" \
+            -passout env:P12_PASSWORD -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES
+          rm "$dir/key.pem"
+          sha1="$(/usr/bin/openssl x509 -in "$dir/cert.pem" -noout -fingerprint -sha1 \
+            | sed -e 's/.*=//' -e 's/://g' | tr '[:upper:]' '[:lower:]')"
+          # The pinned requirement with this certificate's hash in place of the real one.
+          sed -E "s/H\"[0-9a-f]{40}\"/H\"$sha1\"/" signing/designated-requirement.txt \
+            >"$dir/designated-requirement.txt"
+          # generate_appcast signs only with the key whose public half the app carries, so
+          # the dry-run app carries this one. Ed25519 needs Homebrew's OpenSSL, not LibreSSL.
+          if ! openssl genpkey -algorithm ed25519 -out "$dir/ed25519.pem" 2>/dev/null; then
+            echo "::error::$(command -v openssl) cannot make Ed25519 keys; the dry run needs OpenSSL 3 or later"
+            exit 1
+          fi
+          ed_key="$(openssl pkey -in "$dir/ed25519.pem" -outform DER | tail -c 32 | base64)"
+          ed_public="$(openssl pkey -in "$dir/ed25519.pem" -pubout -outform DER | tail -c 32 | base64)"
+          rm "$dir/ed25519.pem"
+          echo "::add-mask::$ed_key"
+          /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $ed_public" "Leader Key/Support/Info.plist"
+          {
+            echo "SIGNING_P12=$dir/signing.p12"
+            echo "SIGNING_P12_PASSWORD=$password"
+            echo "DESIGNATED_REQUIREMENT_FILE=$dir/designated-requirement.txt"
+            echo "SPARKLE_ED_PRIVATE_KEY=$ed_key"
+          } >>"$GITHUB_ENV"
+
+      - name: Build and sign
+        run: bin/release-build
+
+      - name: Generate appcast
+        env:
+          DOWNLOAD_URL_PREFIX: https://github.com/${{ github.repository }}/releases/download/v0.0.0-dry-run/
+        run: bin/release-appcast
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dry-run
+          path: |
+            build/release/Leader-Key-*.zip
+            build/release/appcast.xml
+          if-no-files-found: error
+
+  release:
+    name: Build and sign the release
+    if: github.ref_type == 'tag'
+    runs-on: macos-15
+    environment: release
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # the build number is the commit count; also fetches origin/main
+          persist-credentials: false
+
+      - name: Check the tag
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag $GITHUB_REF_NAME is not vX.Y.Z"
+            exit 1
+          fi
+          # Sparkle installs only a higher CFBundleVersion, which is the commit count,
+          # so a release must come from main's history.
+          if ! git rev-parse --verify --quiet origin/main >/dev/null; then
+            echo "::error::the checkout has no origin/main to compare the tag with"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::$GITHUB_REF_NAME is not on main; tag a commit from main's history"
+            exit 1
+          fi
+          build_number="$(git rev-list --count HEAD)"
+          # Only a missing release (HTTP 404) permits the first release. Authentication
+          # and other API failures must not silently bypass the monotonicity check.
+          latest_error="$(mktemp)"
+          if latest_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>"$latest_error")"; then
+            rm -f "$latest_error"
+            git fetch origin "refs/tags/$latest_tag"
+            latest_build_number="$(git rev-list --count 'FETCH_HEAD^{commit}')"
+            if ((build_number <= latest_build_number)); then
+              echo "::error::tag $GITHUB_REF_NAME build number $build_number must be greater than latest release $latest_tag build number $latest_build_number"
+              exit 1
+            fi
+          elif [[ "$(cat "$latest_error")" == *"(HTTP 404)"* ]]; then
+            rm -f "$latest_error"
+            echo "No published release yet; allowing build number $build_number"
+          else
+            cat "$latest_error" >&2
+            rm -f "$latest_error"
+            echo "::error::could not determine the latest published release"
+            exit 1
+          fi
+          echo "marketing_version=$version" >>"$GITHUB_OUTPUT"
+
+      - name: Build and sign
+        env:
+          P12_BASE64: ${{ secrets.MACOS_SIGNING_P12_BASE64 }}
+          SIGNING_P12_PASSWORD: ${{ secrets.MACOS_SIGNING_P12_PASSWORD }}
+          MARKETING_VERSION: ${{ steps.version.outputs.marketing_version }}
+        run: |
+          if [[ -z "$P12_BASE64" || -z "$SIGNING_P12_PASSWORD" ]]; then
+            echo "::error::the release environment is missing the signing secrets"
+            exit 1
+          fi
+          export SIGNING_P12="$RUNNER_TEMP/signing.p12"
+          trap 'rm -f "$SIGNING_P12"' EXIT
+          (umask 077 && printf '%s' "$P12_BASE64" | base64 --decode >"$SIGNING_P12")
+          bin/release-build
+
+      - name: Generate appcast
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          DOWNLOAD_URL_PREFIX: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/
+        run: bin/release-appcast
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release
+          path: |
+            build/release/Leader-Key-*.zip
+            build/release/appcast.xml
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release
+          path: release
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/Leader-Key-*.zip release/appcast.xml \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --generate-notes

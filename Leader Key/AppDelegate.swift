@@ -1,26 +1,24 @@
 import Cocoa
+import Combine
 import Defaults
 import KeyboardShortcuts
 import Settings
 import Sparkle
 import SwiftUI
-import UserNotifications
-
-let updateLocationIdentifier = "UpdateCheck"
 
 @NSApplicationMain
-class AppDelegate: NSObject, NSApplicationDelegate,
-  SPUStandardUserDriverDelegate,
-  UNUserNotificationCenterDelegate,
-  NSWindowDelegate
-{
+class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NSWindowDelegate {
   var controller: Controller!
 
   let statusItem = StatusItem()
   let config = UserConfig()
 
   var state: UserState!
-  @IBOutlet var updaterController: SPUStandardUpdaterController!
+  private var updaterController: SPUStandardUpdaterController!
+  /// Installs a downloaded update and relaunches; held until Leader Key is idle.
+  private var pendingUpdateInstall: (() -> Void)?
+  private var panelHiddenObserver: AnyCancellable?
+  private var isSettingsOpen = false
 
   lazy var settingsWindowController = SettingsWindowController(
     panes: [
@@ -46,7 +44,13 @@ class AppDelegate: NSObject, NSApplicationDelegate,
     else { return }
     guard !isRunningTests() else { return }
 
-    UNUserNotificationCenter.current().delegate = self
+    // Created here rather than in the storyboard, which would start it as the nib loads,
+    // so a test run never checks for or installs updates.
+    updaterController = SPUStandardUpdaterController(
+      startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
+    panelHiddenObserver = Events.sink { [weak self] event in
+      if event == .didDeactivate { self?.installPendingUpdateIfIdle() }
+    }
 
     NSApp.mainMenu = MainMenu()
 
@@ -148,62 +152,27 @@ class AppDelegate: NSObject, NSApplicationDelegate,
     controller.hide()
   }
 
-  // MARK: - Sparkle Gentle Reminders
+  // MARK: - Updates
 
-  @objc var supportsGentleScheduledUpdateReminders: Bool {
+  /// Sparkle calls this once an automatic update has downloaded. Left to Sparkle, it installs
+  /// only when the app quits, which a menu-bar app seldom does. Installing relaunches the app,
+  /// so it waits until neither the panel nor Settings is open; Sparkle still installs it at quit
+  /// if that comes first.
+  func updater(
+    _ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem,
+    immediateInstallationBlock immediateInstallHandler: @escaping () -> Void
+  ) -> Bool {
+    pendingUpdateInstall = immediateInstallHandler
+    installPendingUpdateIfIdle()
     return true
   }
 
-  func standardUserDriverWillHandleShowingUpdate(
-    _ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem,
-    state: SPUUserUpdateState
-  ) {
-    // Do not change activation policy here; Settings drives visibility
-
-    if !state.userInitiated {
-      NSApp.dockTile.badgeLabel = "1"
-
-      requestNotificationsAuthorizationIfNeeded { granted in
-        guard granted else { return }
-        let content = UNMutableNotificationContent()
-        content.title = "Leader Key Update Available"
-        content.body = "Version \(update.displayVersionString) is now available"
-
-        let request = UNNotificationRequest(
-          identifier: updateLocationIdentifier, content: content,
-          trigger: nil)
-        UNUserNotificationCenter.current().add(request)
-      }
-    }
-  }
-
-  func standardUserDriverDidReceiveUserAttention(
-    forUpdate update: SUAppcastItem
-  ) {
-    NSApp.dockTile.badgeLabel = ""
-
-    UNUserNotificationCenter.current().removeDeliveredNotifications(
-      withIdentifiers: [
-        updateLocationIdentifier
-      ])
-  }
-
-  func standardUserDriverWillFinishUpdateSession() {}
-
-  // MARK: - UNUserNotificationCenter Delegate
-
-  func userNotificationCenter(
-    _ center: UNUserNotificationCenter,
-    didReceive response: UNNotificationResponse,
-    withCompletionHandler completionHandler: @escaping () -> Void
-  ) {
-    if response.notification.request.identifier
-      == updateLocationIdentifier
-      && response.actionIdentifier == UNNotificationDefaultActionIdentifier
-    {
-      updaterController.checkForUpdates(nil)
-    }
-    completionHandler()
+  /// Called when an update is ready, when the panel hides and when Settings closes.
+  private func installPendingUpdateIfIdle() {
+    guard let install = pendingUpdateInstall else { return }
+    guard controller?.window?.isVisible != true, !isSettingsOpen else { return }
+    pendingUpdateInstall = nil
+    install()
   }
 
   func isRunningTests() -> Bool {
@@ -269,6 +238,7 @@ class AppDelegate: NSObject, NSApplicationDelegate,
   // MARK: - Activation Policy: Only Settings Visibility Controls It
 
   private func showSettings() {
+    isSettingsOpen = true
     // Behave like a normal app while Settings is open
     NSApp.setActivationPolicy(.regular)
     settingsWindowController.show()
@@ -282,26 +252,7 @@ class AppDelegate: NSObject, NSApplicationDelegate,
       win == settingsWindowController.window
     else { return }
     NSApp.setActivationPolicy(.accessory)
-  }
-
-  private func requestNotificationsAuthorizationIfNeeded(
-    completion: @escaping (Bool) -> Void
-  ) {
-    UNUserNotificationCenter.current().getNotificationSettings { settings in
-      switch settings.authorizationStatus {
-      case .notDetermined:
-        UNUserNotificationCenter.current().requestAuthorization(options: [
-          .alert, .badge, .sound,
-        ]) { granted, _ in
-          DispatchQueue.main.async { completion(granted) }
-        }
-      case .authorized, .provisional, .ephemeral:
-        DispatchQueue.main.async { completion(true) }
-      case .denied:
-        DispatchQueue.main.async { completion(false) }
-      @unknown default:
-        DispatchQueue.main.async { completion(false) }
-      }
-    }
+    isSettingsOpen = false
+    installPendingUpdateIfIdle()
   }
 }

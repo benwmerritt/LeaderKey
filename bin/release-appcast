@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Sparkle appcast for the zip bin/release-build made: build/release/appcast.xml.
+#
+# Downloads the Sparkle distribution matching the app's Sparkle package, checks
+# its pinned hash, and runs its generate_appcast on a folder holding only that
+# zip, which signs the update with the EdDSA key. Used by
+# .github/workflows/release.yml for releases and dry runs alike.
+#
+# Environment:
+#   SPARKLE_ED_PRIVATE_KEY  base64 Ed25519 seed (required); piped to generate_appcast,
+#                           never passed in a command line
+#   DOWNLOAD_URL_PREFIX     https URL of the folder the zip is published in, ending in /
+#                           (required)
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+sparkle_version="2.8.0"
+sparkle_sha256="fd5681ee92bf238aaac2d08214ceaf0cc8976e452d7f882d80bac1e61581f3b1"
+output_dir="build/release"
+
+log() { echo "release-appcast: $*" >&2; }
+fail() {
+  log "$*"
+  exit 1
+}
+
+[[ -n "${SPARKLE_ED_PRIVATE_KEY:-}" ]] || fail "SPARKLE_ED_PRIVATE_KEY is not set"
+[[ "${DOWNLOAD_URL_PREFIX:-}" == https://*/ ]] \
+  || fail "DOWNLOAD_URL_PREFIX must be an https URL ending in /, got '${DOWNLOAD_URL_PREFIX:-}'"
+zips=("$output_dir"/Leader-Key-*.zip)
+if ((${#zips[@]} != 1)) || [[ ! -f "${zips[0]}" ]]; then
+  fail "expected exactly one Leader-Key-*.zip from bin/release-build in $output_dir"
+fi
+
+work="$(mktemp -d "${TMPDIR:-/tmp}/leaderkey-appcast.XXXXXX")"
+trap 'rm -rf "$work"' EXIT
+
+curl -fsSL -o "$work/sparkle.tar.xz" \
+  "https://github.com/sparkle-project/Sparkle/releases/download/$sparkle_version/Sparkle-$sparkle_version.tar.xz"
+echo "$sparkle_sha256  $work/sparkle.tar.xz" | shasum -a 256 -c - >/dev/null \
+  || fail "the Sparkle $sparkle_version download does not match its pinned SHA-256"
+mkdir "$work/sparkle" "$work/feed"
+tar -xJf "$work/sparkle.tar.xz" -C "$work/sparkle"
+
+# generate_appcast signs every archive in the folder, so give it only this release, and
+# it merges into an existing appcast, so start from none.
+cp "${zips[0]}" "$work/feed/"
+rm -f "$output_dir/appcast.xml"
+printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$work/sparkle/bin/generate_appcast" \
+  --ed-key-file - \
+  --download-url-prefix "$DOWNLOAD_URL_PREFIX" \
+  -o "$output_dir/appcast.xml" \
+  "$work/feed"
+# generate_appcast only warns, and leaves the update unsigned, when the key does not match
+# the app's SUPublicEDKey, so a signature here also means the key matches the app.
+grep -q 'sparkle:edSignature=' "$output_dir/appcast.xml" \
+  || fail "$output_dir/appcast.xml has no EdDSA signature; does the key match SUPublicEDKey?"
+
+echo "$PWD/$output_dir/appcast.xml"

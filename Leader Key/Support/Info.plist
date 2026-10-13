@@ -21,9 +21,13 @@
 			</array>
 		</dict>
 	</array>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 	<key>SUFeedURL</key>
-	<string>https://mikker.github.io/LeaderKey.app/appcast.xml</string>
+	<string>https://github.com/benwmerritt/LeaderKey/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>4ZfPYKvzE7b/uYW4B8f2v++7Bry/OmvYHCzl3g936KE=</string>
+	<string>b0wmcT7fOUoS+ickDWjpT0LQ2rPgvXkJGH3LNSb4teg=</string>
 </dict>
 </plist>

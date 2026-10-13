@@ -842,7 +842,7 @@ private class ActionCellView: NSTableCellView, NSWindowDelegate {
     if response == .alertFirstButtonReturn { onOK(field.stringValue) }
   }
 
-  // MARK: Key capture logic (replicates SwiftUI KeyButton UX)
+  // MARK: Key capture logic
   private var keyMonitor: Any?
   private func beginKeyCapture() {
     guard keyMonitor == nil else { return }

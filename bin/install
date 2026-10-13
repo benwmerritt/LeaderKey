@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Install a Leader Key build into /Applications: quit the running app, back the
+# installed one up, copy the new build in, relaunch. Needs only the .app bundle.
+# Once the app has been quit, any failure or interruption puts the previous app
+# back (on a first install, removes the partial copy) and relaunches it if it was
+# running.
+#
+#   bin/install [APP]    APP defaults to build/Leader Key.app in this checkout
+set -euo pipefail
+
+app="${1:-$(cd "$(dirname "$0")/.." && pwd)/build/Leader Key.app}"
+dest="/Applications/Leader Key.app"
+backup_root="$HOME/Library/Caches/LeaderKey/backups"
+bundle_id="com.brnbw.Leader-Key"
+# pgrep/pkill -f pattern for this user's copy running from $dest, so test hosts
+# in DerivedData and other users' copies are left alone.
+executable="$dest/Contents/MacOS/Leader Key"
+process_pattern="^${executable//./[.]}( |\$)"
+uid="$(id -u)"
+
+if [[ ! -d "$app/Contents" ]]; then
+  echo "bin/install: no app bundle at $app" >&2
+  exit 1
+fi
+
+running() {
+  pgrep -u "$uid" -f "$process_pattern" >/dev/null
+}
+
+# Poll until the app has exited; $1 is the number of half-second tries.
+wait_for_exit() {
+  local tries=$1
+  while ((tries-- > 0)); do
+    running || return 0
+    sleep 0.5
+  done
+  return 1
+}
+
+# Ask the app to quit. Over SSH, osascript can block for minutes on an
+# Automation consent prompt nobody can answer, so it gets 5 seconds.
+request_quit() {
+  osascript -e "tell application id \"$bundle_id\" to quit" >/dev/null 2>&1 &
+  local pid=$! tries=10
+  while ((tries-- > 0)) && kill -0 "$pid" 2>/dev/null; do
+    sleep 0.5
+  done
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+
+was_running=false
+# Where the previously installed app is moved. Set before the move, so an
+# interruption right after it still finds the backup.
+backup_app=""
+copying=false
+installed=false
+
+# EXIT trap: set -e failures and the signal traps below all end up here.
+rollback() {
+  local status=$?
+  if $installed; then return; fi
+  set +e
+  if [[ -n "$backup_app" && -d "$backup_app" ]]; then
+    rm -rf "$dest"
+    if mv "$backup_app" "$dest"; then
+      echo "bin/install: put the previous app back at $dest" >&2
+    else
+      echo "bin/install: could not put the previous app back; it is at $backup_app" >&2
+    fi
+  elif $copying; then
+    rm -rf "$dest"
+    echo "bin/install: removed the partial copy at $dest" >&2
+  fi
+  if $was_running && [[ -d "$dest" ]] && ! running; then
+    open "$dest"
+  fi
+  exit $((status == 0 ? 1 : status))
+}
+trap rollback EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if running; then
+  was_running=true
+  echo "Quitting Leader Key..."
+  request_quit
+  if ! wait_for_exit 20; then
+    echo "Leader Key did not quit on request; sending SIGTERM" >&2
+    pkill -u "$uid" -f "$process_pattern" || true
+    if ! wait_for_exit 10; then
+      echo "Leader Key is still running; aborting install" >&2
+      exit 1
+    fi
+  fi
+fi
+
+if [[ -d "$dest" ]]; then
+  mkdir -p "$backup_root"
+  backup_app="$(mktemp -d "$backup_root/$(date +%Y%m%d-%H%M%S).XXXX")/Leader Key.app"
+  mv "$dest" "$backup_app"
+  echo "Backed up previous app to $backup_app"
+fi
+
+copying=true
+if ! ditto "$app" "$dest"; then
+  echo "bin/install: copying $app to $dest failed" >&2
+  exit 1
+fi
+
+xattr -dr com.apple.quarantine "$dest" 2>/dev/null || true
+open "$dest"
+installed=true
+echo "Installed $dest"
