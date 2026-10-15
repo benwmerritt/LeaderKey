@@ -25,6 +25,9 @@ class Controller {
 
   private var cancellables = Set<AnyCancellable>()
 
+  /// The screen the panel and its text boxes open on.
+  private var configuredScreen: NSScreen { Defaults[.screen].getNSScreen() ?? NSScreen() }
+
   init(userState: UserState, userConfig: UserConfig) {
     self.userState = userState
     self.userConfig = userConfig
@@ -64,8 +67,7 @@ class Controller {
   func show() {
     Events.send(.willActivate)
 
-    let screen = Defaults[.screen].getNSScreen() ?? NSScreen()
-    window.show(on: screen) {
+    window.show(on: configuredScreen) {
       Events.send(.didActivate)
     }
 
@@ -283,9 +285,14 @@ class Controller {
   }
 
   private func openURL(_ action: Action) {
-    guard let url = URL(string: action.value) else {
+    guard
+      let expanded = URLTemplate.expand(
+        action.value, fill: { self.fillPlaceholder($0, actionTitle: action.displayName) })
+    else { return }
+
+    guard let url = URL(string: expanded) else {
       showAlert(
-        title: "Invalid URL", message: "Failed to parse URL: \(action.value)")
+        title: "Invalid URL", message: "Failed to parse URL: \(expanded)")
       return
     }
 
@@ -293,7 +300,7 @@ class Controller {
       showAlert(
         title: "Invalid URL",
         message:
-          "URL is missing protocol (e.g. https://, raycast://): \(action.value)"
+          "URL is missing protocol (e.g. https://, raycast://): \(expanded)"
       )
       return
     }
@@ -306,6 +313,22 @@ class Controller {
       NSWorkspace.shared.open(
         url,
         configuration: DontActivateConfiguration.shared.configuration)
+    }
+  }
+
+  /// Nil when the user cancels.
+  private func fillPlaceholder(_ placeholder: URLPlaceholder, actionTitle: String) -> String? {
+    switch placeholder {
+    case .clipboard:
+      let text =
+        NSPasteboard.general.string(forType: .string)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      if !text.isEmpty { return text }
+      return TextPrompt.ask(
+        title: actionTitle, label: "Text", message: "The clipboard holds no text.",
+        on: configuredScreen)
+    case .text(let label):
+      return TextPrompt.ask(title: actionTitle, label: label, on: configuredScreen)
     }
   }
 

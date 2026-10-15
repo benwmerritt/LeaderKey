@@ -1,6 +1,6 @@
 # About this fork
 
-This is [benwmerritt](https://github.com/benwmerritt)'s personal build of [mikker/LeaderKey](https://github.com/mikker/LeaderKey): the same app and bundle ID, built and signed by this fork's GitHub Actions with a self-signed certificate. Updates come from [this fork's releases](https://github.com/benwmerritt/LeaderKey/releases): the app's Sparkle updater reads their feed, downloads new versions in the background and installs them by relaunching Leader Key while its panel and Settings are closed. Nothing is notarised, so a Mac gets its first copy through `bin/install` (after `bin/build`, or from a release zip) rather than by double-clicking a download. The fork also reads a [TOML config](#a-toml-config). Everything after that section is upstream's README.
+This is [benwmerritt](https://github.com/benwmerritt)'s personal build of [mikker/LeaderKey](https://github.com/mikker/LeaderKey): the same app and bundle ID, built and signed by this fork's GitHub Actions with a self-signed certificate. Updates come from [this fork's releases](https://github.com/benwmerritt/LeaderKey/releases): the app's Sparkle updater reads their feed, downloads new versions in the background and installs them by relaunching Leader Key while its panel and Settings are closed. Nothing is notarised, so a Mac gets its first copy through `bin/install` (after `bin/build`, or from a release zip) rather than by double-clicking a download. The fork also reads a [TOML config](#a-toml-config). Everything after that section is upstream's README, except [placeholders in URL actions](#placeholders-in-url-actions), which only this fork has.
 
 ## A TOML config
 
@@ -113,6 +113,29 @@ $ brew install leader-key
 - <kbd>leader</kbd><kbd>o</kbd><kbd>m</kbd> → Launch Messages (`open messages`)
 - <kbd>leader</kbd><kbd>m</kbd><kbd>m</kbd> → Mute audio (`media mute`)
 - <kbd>leader</kbd><kbd>w</kbd><kbd>m</kbd> → Maximize current window (`window maximize`)
+
+## Placeholders in URL actions
+
+A URL action can leave parts of its URL to be filled in each time it runs:
+
+```json
+{ "key": "g", "type": "url", "label": "Search Google", "value": "https://google.com/search?q={query}" }
+```
+
+| Placeholder | Filled with |
+|---|---|
+| `{clipboard}` | The text on the clipboard, without leading or trailing whitespace. When the clipboard holds no text, Leader Key asks for it instead. |
+| `{argument}`, `{query}`, `{search query}` | Text you type into a box titled with the action's label. |
+| `{argument name="Topic"}` | The same, with `Topic` shown in the box. |
+
+- Letter case doesn't matter: `{Query}` and `{query}` are the same placeholder.
+- A placeholder used more than once in a URL is asked for once.
+- Cancel, <kbd>Esc</kbd> or clicking another app closes the box and opens nothing.
+- The box takes the keyboard, so in sticky mode it closes the panel.
+- Every character outside `A–Z`, `a–z`, `0–9` and `-._~` is percent-encoded, so a value with `&`, `#`, `/` or spaces stays inside the query, path or fragment it lands in.
+- Anything else in braces, such as `{id}` or `{argument name="X" default="Y"}`, is left as written.
+
+Placeholders work in URL actions only; command actions run as written.
 
 ## URL Scheme
 
