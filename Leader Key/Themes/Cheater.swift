@@ -4,6 +4,7 @@ import SwiftUI
 enum Cheater {
   class Window: MainWindow {
     override var hasCheatsheet: Bool { return false }
+    private var shownOn: NSScreen?
 
     required init(controller: Controller) {
       super.init(controller: controller, contentRect: NSRect(x: 0, y: 0, width: 0, height: 0))
@@ -12,10 +13,8 @@ enum Cheater {
     }
 
     override func show(on screen: NSScreen, after: (() -> Void)?) {
-      let center = screen.center()
-      let newOriginX = center.x - frame.width / 2
-      let newOriginY = center.y - frame.height / 2 + frame.height / 8
-      self.setFrameOrigin(NSPoint(x: newOriginX, y: newOriginY))
+      shownOn = screen
+      centerOnScreen()
 
       makeKeyAndOrderFront(nil)
 
@@ -33,6 +32,17 @@ enum Cheater {
 
     override func notFound() {
       shake()
+    }
+
+    /// The hosting view resizes the panel to fit each group, and AppKit keeps the top edge in
+    /// place when it does, so a taller group would run off the bottom of the screen.
+    @objc func windowDidResize(_ notification: Notification) {
+      centerOnScreen()
+    }
+
+    private func centerOnScreen() {
+      guard let screen = shownOn else { return }
+      setFrameOrigin(screen.visibleFrame.centeredOrigin(for: frame.size))
     }
   }
 }

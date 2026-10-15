@@ -52,6 +52,13 @@ class Controller {
     }.store(in: &cancellables)
 
     self.cheatsheetWindow = Cheatsheet.createWindow(for: userState)
+
+    // The cheatsheet resizes to fit each group, keeping its top edge where it was, so put it
+    // back next to the main window every time.
+    NotificationCenter.default
+      .publisher(for: NSWindow.didResizeNotification, object: cheatsheetWindow)
+      .sink { _ in self.positionCheatsheetWindow() }
+      .store(in: &cancellables)
   }
 
   func show() {
@@ -119,9 +126,6 @@ class Controller {
     switch event.keyCode {
     case KeyHelpers.backspace.rawValue:
       clear()
-      delay(1) {
-        self.positionCheatsheetWindow()
-      }
     case KeyHelpers.escape.rawValue:
       window.resignKey()
     default:
@@ -179,11 +183,6 @@ class Controller {
       userState.navigateToGroup(group)
     case .none:
       window.notFound()
-    }
-
-    // Why do we need to wait here?
-    delay(1) {
-      self.positionCheatsheetWindow()
     }
   }
 
