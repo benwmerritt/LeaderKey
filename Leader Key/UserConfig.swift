@@ -35,10 +35,14 @@ class UserConfig: ObservableObject {
 
   // MARK: - Public Interface
 
-  func ensureAndLoad() {
+  /// Returns whether there was no config file, as on a Mac's first launch.
+  @discardableResult
+  func ensureAndLoad() -> Bool {
     ensureValidConfigDirectory()
+    let hadNoConfig = !exists
     ensureConfigFileExists()
     loadConfig()
+    return hadNoConfig
   }
 
   func reloadFromFile() {

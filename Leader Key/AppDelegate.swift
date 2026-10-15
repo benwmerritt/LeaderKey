@@ -54,7 +54,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NSWindow
 
     NSApp.mainMenu = MainMenu()
 
-    config.ensureAndLoad()
+    let hadNoConfig = config.ensureAndLoad()
     state = UserState(userConfig: config)
     controller = Controller(userState: state, userConfig: config)
 
@@ -94,6 +94,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NSWindow
     // Activation policy is managed solely by the Settings window
 
     registerGlobalShortcuts()
+
+    // Only a first run opens Settings: while it is open, a downloaded update cannot install.
+    if hadNoConfig {
+      showSettings()
+    }
   }
 
   func activate() {
@@ -130,13 +135,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NSWindow
         self.processKeys([groupKey])
       }
     }
-    if Defaults[.groupShortcuts].isEmpty && !KeyboardShortcuts.isEnabled(for: .activate) {
-      showSettings()
-    }
   }
 
   func applicationWillTerminate(_ notification: Notification) {
     // Config saves automatically on changes
+  }
+
+  // Opening Leader Key while it runs shows Settings: the way back in for a Mac with neither a
+  // menu-bar icon nor a shortcut.
+  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
+  {
+    showSettings()
+    return false
   }
 
   @IBAction

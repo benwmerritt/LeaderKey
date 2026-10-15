@@ -74,6 +74,15 @@ final class UserConfigTests: XCTestCase {
     XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
   }
 
+  func testReportsAMissingConfigOnlyOnTheFirstLaunch() throws {
+    XCTAssertTrue(subject.ensureAndLoad())
+    waitForConfigLoad()
+
+    let nextLaunch = UserConfig(alertHandler: testAlertManager)
+    XCTAssertFalse(nextLaunch.ensureAndLoad())
+    waitUntil("the next launch's config to load") { !nextLaunch.isLoading }
+  }
+
   func testCreatesDefaultConfigDirIfNotExists() throws {
     let defaultDir = UserConfig.defaultDirectory()
     // Remove both directory and config file
@@ -174,7 +183,7 @@ final class UserConfigTests: XCTestCase {
     try FileManager.default.createSymbolicLink(
       atPath: subject.path, withDestinationPath: destination)
 
-    subject.ensureAndLoad()
+    XCTAssertTrue(subject.ensureAndLoad())
     waitForConfigLoad()
 
     XCTAssertTrue(isSymlink(subject.path))
