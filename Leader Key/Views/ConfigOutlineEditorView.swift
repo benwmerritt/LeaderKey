@@ -195,24 +195,24 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
         validationError: userConfig?.validationError(at: path),
         isEditable: isEditable,
         onChange: { [weak self] payload in
-          guard let self = self else { return }
+          guard let self, self.isEditable else { return }
           node.apply(payload)
           self.propagateRootChange()
         },
         onDelete: { [weak self] in
-          guard let self = self else { return }
+          guard let self, self.isEditable else { return }
           node.deleteFromParent()
           outlineView.reloadData()
           self.propagateRootChange()
         },
         onDuplicate: { [weak self] in
-          guard let self = self else { return }
+          guard let self, self.isEditable else { return }
           node.duplicateInParent()
           outlineView.reloadData()
           self.propagateRootChange()
         },
         onAddAction: { [weak self] in
-          guard let self else { return }
+          guard let self, self.isEditable else { return }
           node.children.append(
             EditorNode.action(Action(key: "", type: .application, value: ""), parent: node))
           outlineView.reloadData()
@@ -221,7 +221,7 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
           self.propagateRootChange()
         },
         onAddGroup: { [weak self] in
-          guard let self else { return }
+          guard let self, self.isEditable else { return }
           node.children.append(EditorNode.group(Group(key: "", actions: []), parent: node))
           outlineView.reloadData()
           outlineView.expandItem(node)
@@ -239,18 +239,18 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
         validationError: userConfig?.validationError(at: path),
         isEditable: isEditable,
         onChange: { [weak self] payload in
-          guard let self = self else { return }
+          guard let self, self.isEditable else { return }
           node.apply(payload)
           self.propagateRootChange()
         },
         onDelete: { [weak self] in
-          guard let self = self else { return }
+          guard let self, self.isEditable else { return }
           node.deleteFromParent()
           outlineView.reloadData()
           self.propagateRootChange()
         },
         onDuplicate: { [weak self] in
-          guard let self = self else { return }
+          guard let self, self.isEditable else { return }
           node.duplicateInParent()
           outlineView.reloadData()
           self.propagateRootChange()

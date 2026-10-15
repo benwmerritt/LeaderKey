@@ -48,6 +48,8 @@ class UserConfig: ObservableObject {
   private(set) var isLoading = false
   private let configIOQueue = DispatchQueue(label: "ConfigIO", qos: .userInitiated)
   private var saveWorkItem: DispatchWorkItem?
+  /// Counts loads, so a load that a newer one has overtaken doesn't apply its result.
+  private var loadGeneration = 0
 
   init(
     alertHandler: AlertHandler = DefaultAlertHandler(),
@@ -319,8 +321,13 @@ class UserConfig: ObservableObject {
 
   /// A `config.toml` in the config directory wins over `config.json`.
   private func detectFormat() {
-    format = fileManager.fileExists(atPath: path(for: .toml)) ? .toml : .json
-    if !format.isEditable { saveWorkItem?.cancel() }
+    let detected: ConfigFormat = fileManager.fileExists(atPath: path(for: .toml)) ? .toml : .json
+    if !detected.isEditable {
+      saveWorkItem?.cancel()
+      // A config.json write already handed to the I/O queue finishes before config.toml is live.
+      configIOQueue.sync {}
+    }
+    format = detected
   }
 
   private func ensureConfigFileExists() {
@@ -439,6 +446,8 @@ class UserConfig: ObservableObject {
 
   private func loadConfig(suppressAlerts: Bool = false) {
     isLoading = true
+    loadGeneration += 1
+    let generation = loadGeneration
 
     guard exists else {
       root = emptyRoot
@@ -458,6 +467,7 @@ class UserConfig: ObservableObject {
         let validationErrors = ConfigValidator.validate(group: decodedRoot)
 
         DispatchQueue.main.async {
+          guard generation == self.loadGeneration else { return }
           self.root = decodedRoot
           self.lastReadChecksum = checksum
           self.setValidationErrors(validationErrors)
@@ -466,6 +476,7 @@ class UserConfig: ObservableObject {
         }
       } catch {
         DispatchQueue.main.async {
+          guard generation == self.loadGeneration else { return }
           self.handleError(error, critical: false)
           self.isLoading = false
         }

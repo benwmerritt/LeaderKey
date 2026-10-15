@@ -324,6 +324,26 @@ final class UserConfigTests: XCTestCase {
     XCTAssertEqual(subject.root.actions.compactMap { $0.item.key }, ["a"])
   }
 
+  func testAReloadOvertakenByAnotherDoesNotApply() throws {
+    try tomlConfig.write(toFile: tomlPath, atomically: true, encoding: .utf8)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    XCTAssertEqual(subject.format, .toml)
+
+    // The first reload reads config.toml in the background; the second finds neither file.
+    subject.reloadFromFile()
+    try FileManager.default.removeItem(atPath: tomlPath)
+    subject.reloadFromFile()
+    waitForConfigLoad()
+    // Wait out the 300 ms debounce a stale tree landing in `root` would save after.
+    RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+
+    XCTAssertEqual(subject.format, .json)
+    XCTAssertEqual(subject.root, emptyRoot)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: jsonPath))
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
   func testBrokenTOMLShowsItsErrorAndDoesNotFallBackToJSON() throws {
     try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
     try "[o]\ng = { app = 1 }\n".write(toFile: tomlPath, atomically: true, encoding: .utf8)
