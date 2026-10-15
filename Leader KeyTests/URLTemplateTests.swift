@@ -102,6 +102,14 @@ final class URLTemplateTests: XCTestCase {
     XCTAssertEqual(asked, [.text(label: "Query")])
   }
 
+  func testAsksSeparatelyForDifferentPlaceholdersWithOneLabel() {
+    var answers = ["first", "second"]
+    let result = URLTemplate.expand(#"https://example.com/?a={query}&b={argument name="Query"}"#) {
+      _ in answers.removeFirst()
+    }
+    XCTAssertEqual(result, "https://example.com/?a=first&b=second")
+  }
+
   func testAsksForEachNamedArgumentInOrder() {
     let (result, asked) = expand(
       #"https://example.com/?from={argument name="From"}&to={argument name="To"}"#,

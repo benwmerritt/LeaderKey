@@ -20,11 +20,14 @@ enum URLTemplate {
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~".utf8)
 
   /// Replaces each placeholder in `template` with its value from `fill`, percent-encoded. `fill`
-  /// is asked once per distinct placeholder, in order of first appearance; any other `{...}`
-  /// stays as written. Returns nil as soon as `fill` does.
+  /// is asked once per placeholder, ignoring letter case, in order of first appearance; any other
+  /// `{...}` stays as written. Returns nil as soon as `fill` does.
   static func expand(_ template: String, fill: (URLPlaceholder) -> String?) -> String? {
-    var values: [URLPlaceholder: String] = [:]
+    var values: [String: String] = [:]
     return try? template.replacing(placeholderPattern) { match -> String in
+      let written = match.output.0.lowercased()
+      if let value = values[written] { return value }
+
       let placeholder: URLPlaceholder
       if let name = match.output.name {
         placeholder = .text(label: String(name))
@@ -33,11 +36,9 @@ enum URLTemplate {
       } else {
         placeholder = .clipboard
       }
-
-      if let value = values[placeholder] { return value }
       guard let value = fill(placeholder) else { throw Cancelled() }
       let encoded = percentEncoded(value)
-      values[placeholder] = encoded
+      values[written] = encoded
       return encoded
     }
   }

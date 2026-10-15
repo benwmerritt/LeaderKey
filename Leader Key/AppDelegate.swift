@@ -166,8 +166,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NSWindow
 
   /// Sparkle calls this once an automatic update has downloaded. Left to Sparkle, it installs
   /// only when the app quits, which a menu-bar app seldom does. Installing relaunches the app,
-  /// so it waits until neither the panel nor Settings is open; Sparkle still installs it at quit
-  /// if that comes first.
+  /// so it waits until neither the panel, Settings nor a modal window such as a URL action's text
+  /// box is open; Sparkle still installs it at quit if that comes first.
   func updater(
     _ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem,
     immediateInstallationBlock immediateInstallHandler: @escaping () -> Void
@@ -180,7 +180,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NSWindow
   /// Called when an update is ready, when the panel hides and when Settings closes.
   private func installPendingUpdateIfIdle() {
     guard let install = pendingUpdateInstall else { return }
-    guard controller?.window?.isVisible != true, !isSettingsOpen else { return }
+    guard controller?.window?.isVisible != true, !isSettingsOpen, NSApp.modalWindow == nil
+    else { return }
     pendingUpdateInstall = nil
     install()
   }
