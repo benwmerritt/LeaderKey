@@ -74,6 +74,13 @@ final class UserConfigTests: XCTestCase {
     XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
   }
 
+  func testReportsCreatingTheConfigOnlyOnTheFirstLaunch() throws {
+    XCTAssertTrue(subject.ensureAndLoad())
+    waitForConfigLoad()
+
+    XCTAssertFalse(UserConfig(alertHandler: testAlertManager).ensureAndLoad())
+  }
+
   func testCreatesDefaultConfigDirIfNotExists() throws {
     let defaultDir = UserConfig.defaultDirectory()
     // Remove both directory and config file

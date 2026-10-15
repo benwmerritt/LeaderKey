@@ -35,10 +35,13 @@ class UserConfig: ObservableObject {
 
   // MARK: - Public Interface
 
-  func ensureAndLoad() {
+  /// Returns whether it wrote the default config because there was none.
+  @discardableResult
+  func ensureAndLoad() -> Bool {
     ensureValidConfigDirectory()
-    ensureConfigFileExists()
+    let createdConfig = ensureConfigFileExists()
     loadConfig()
+    return createdConfig
   }
 
   func reloadFromFile() {
@@ -225,13 +228,15 @@ class UserConfig: ObservableObject {
     fileManager.fileExists(atPath: path)
   }
 
-  private func ensureConfigFileExists() {
-    guard !exists else { return }
+  private func ensureConfigFileExists() -> Bool {
+    guard !exists else { return false }
 
     do {
       try bootstrapConfig()
+      return true
     } catch {
       handleError(error, critical: true)
+      return false
     }
   }
 
