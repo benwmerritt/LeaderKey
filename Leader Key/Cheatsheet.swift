@@ -124,7 +124,7 @@ enum Cheatsheet {
 
     var actions: [ActionOrGroup] {
       (userState.currentGroup != nil)
-        ? userState.currentGroup!.actions : userState.userConfig.root.actions
+        ? userState.currentGroup!.actions : userState.visibleRoot.actions
     }
 
     var body: some SwiftUI.View {
