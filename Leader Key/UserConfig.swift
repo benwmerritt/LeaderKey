@@ -397,8 +397,8 @@ class UserConfig: ObservableObject {
     return target
   }
 
-  private func readFile() throws -> String {
-    try String(contentsOfFile: path, encoding: .utf8)
+  private func readFile(_ format: ConfigFormat) throws -> String {
+    try String(contentsOfFile: path(for: format), encoding: .utf8)
   }
 
   private func calculateChecksum(_ content: String) -> String {
@@ -411,10 +411,11 @@ class UserConfig: ObservableObject {
     return digest.compactMap { String(format: "%02x", $0) }.joined()
   }
 
+  /// The checksum of `config.json`, the only file Leader Key saves.
   private func getCurrentFileChecksum() -> String? {
-    guard exists else { return nil }
+    guard fileManager.fileExists(atPath: path(for: .json)) else { return nil }
     do {
-      let content = try readFile()
+      let content = try readFile(.json)
       return calculateChecksum(content)
     } catch {
       return nil
@@ -451,7 +452,7 @@ class UserConfig: ObservableObject {
       guard let self = self else { return }
 
       do {
-        let configString = try self.readFile()
+        let configString = try self.readFile(format)
         let decodedRoot = try format.decode(configString)
         let checksum = self.calculateChecksum(configString)
         let validationErrors = ConfigValidator.validate(group: decodedRoot)

@@ -36,8 +36,10 @@ struct GeneralPane: View {
           }
 
           if !config.validationErrors.isEmpty {
-            ValidationWarningView(errors: config.validationErrors)
-              .transition(.opacity)
+            ValidationWarningView(
+              errors: config.validationErrors, savesContinue: config.format.isEditable
+            )
+            .transition(.opacity)
           }
 
           HStack {
@@ -126,10 +128,12 @@ struct GeneralPane_Previews: PreviewProvider {
 /// Compact banner that surfaces validation issues directly in the settings UI.
 private struct ValidationWarningView: View {
   private let errors: [ValidationError]
+  private let savesContinue: Bool
   private let maxVisibleErrors = 3
 
-  init(errors: [ValidationError]) {
+  init(errors: [ValidationError], savesContinue: Bool) {
     self.errors = errors
+    self.savesContinue = savesContinue
   }
 
   var body: some View {
@@ -150,7 +154,10 @@ private struct ValidationWarningView: View {
         }
 
         Text(
-          "Configuration saves continue, but shortcuts tied to these keys may misbehave until fixed."
+          savesContinue
+            ? "Configuration saves continue, "
+              + "but shortcuts tied to these keys may misbehave until fixed."
+            : "Shortcuts tied to these keys may misbehave until you fix them in config.toml."
         )
         .font(.caption)
         .padding(.top, 4)
