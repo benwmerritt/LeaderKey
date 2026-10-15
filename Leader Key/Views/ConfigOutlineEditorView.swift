@@ -76,6 +76,9 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
       if isEditable != oldValue { outline.reloadData() }
     }
   }
+  /// Whether an edit may change the tree. `isEditable` only changes when SwiftUI next updates the
+  /// view, so this also checks the live format, which changes as soon as config.toml is found.
+  private var canEdit: Bool { isEditable && userConfig?.format.isEditable != false }
   private var didApplyInitialExpansion = false
   private let expandedDefaultsKey = "ConfigOutlineEditor.ExpandedIndexPaths"
   private let dragType = NSPasteboard.PasteboardType("com.leaderkey.node")
@@ -195,24 +198,24 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
         validationError: userConfig?.validationError(at: path),
         isEditable: isEditable,
         onChange: { [weak self] payload in
-          guard let self, self.isEditable else { return }
+          guard let self, self.canEdit else { return }
           node.apply(payload)
           self.propagateRootChange()
         },
         onDelete: { [weak self] in
-          guard let self, self.isEditable else { return }
+          guard let self, self.canEdit else { return }
           node.deleteFromParent()
           outlineView.reloadData()
           self.propagateRootChange()
         },
         onDuplicate: { [weak self] in
-          guard let self, self.isEditable else { return }
+          guard let self, self.canEdit else { return }
           node.duplicateInParent()
           outlineView.reloadData()
           self.propagateRootChange()
         },
         onAddAction: { [weak self] in
-          guard let self, self.isEditable else { return }
+          guard let self, self.canEdit else { return }
           node.children.append(
             EditorNode.action(Action(key: "", type: .application, value: ""), parent: node))
           outlineView.reloadData()
@@ -221,7 +224,7 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
           self.propagateRootChange()
         },
         onAddGroup: { [weak self] in
-          guard let self, self.isEditable else { return }
+          guard let self, self.canEdit else { return }
           node.children.append(EditorNode.group(Group(key: "", actions: []), parent: node))
           outlineView.reloadData()
           outlineView.expandItem(node)
@@ -239,18 +242,18 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
         validationError: userConfig?.validationError(at: path),
         isEditable: isEditable,
         onChange: { [weak self] payload in
-          guard let self, self.isEditable else { return }
+          guard let self, self.canEdit else { return }
           node.apply(payload)
           self.propagateRootChange()
         },
         onDelete: { [weak self] in
-          guard let self, self.isEditable else { return }
+          guard let self, self.canEdit else { return }
           node.deleteFromParent()
           outlineView.reloadData()
           self.propagateRootChange()
         },
         onDuplicate: { [weak self] in
-          guard let self, self.isEditable else { return }
+          guard let self, self.canEdit else { return }
           node.duplicateInParent()
           outlineView.reloadData()
           self.propagateRootChange()
@@ -399,7 +402,7 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
   func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any)
     -> NSPasteboardWriting?
   {
-    guard isEditable, let node = item as? EditorNode else { return nil }
+    guard canEdit, let node = item as? EditorNode else { return nil }
     let pb = NSPasteboardItem()
     pb.setString(node.id.uuidString, forType: dragType)
     return pb
@@ -410,13 +413,13 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
     proposedChildIndex index: Int
   ) -> NSDragOperation {
     // Be permissive; we will normalize the target in acceptDrop
-    return isEditable ? .move : []
+    return canEdit ? .move : []
   }
 
   func outlineView(
     _ outlineView: NSOutlineView, acceptDrop info: NSDraggingInfo, item: Any?, childIndex: Int
   ) -> Bool {
-    guard isEditable, let str = info.draggingPasteboard.string(forType: dragType),
+    guard canEdit, let str = info.draggingPasteboard.string(forType: dragType),
       let dragged = findNode(by: str)
     else { return false }
 
@@ -483,7 +486,7 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
 
   // MARK: Sort A→Z
   private func sortAll() {
-    guard isEditable else { return }
+    guard canEdit else { return }
     let expansionIDs = collectExpandedIDs()
 
     func sortRec(_ node: EditorNode) {
