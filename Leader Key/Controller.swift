@@ -25,6 +25,9 @@ class Controller {
 
   private var cancellables = Set<AnyCancellable>()
 
+  /// The screen the panel and its text boxes open on.
+  private var configuredScreen: NSScreen { Defaults[.screen].getNSScreen() ?? NSScreen() }
+
   init(userState: UserState, userConfig: UserConfig) {
     self.userState = userState
     self.userConfig = userConfig
@@ -57,8 +60,7 @@ class Controller {
   func show() {
     Events.send(.willActivate)
 
-    let screen = Defaults[.screen].getNSScreen() ?? NSScreen()
-    window.show(on: screen) {
+    window.show(on: configuredScreen) {
       Events.send(.didActivate)
     }
 
@@ -324,9 +326,10 @@ class Controller {
         .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       if !text.isEmpty { return text }
       return TextPrompt.ask(
-        title: actionTitle, label: "Text", message: "The clipboard holds no text.")
+        title: actionTitle, label: "Text", message: "The clipboard holds no text.",
+        on: configuredScreen)
     case .text(let label):
-      return TextPrompt.ask(title: actionTitle, label: label)
+      return TextPrompt.ask(title: actionTitle, label: label, on: configuredScreen)
     }
   }
 

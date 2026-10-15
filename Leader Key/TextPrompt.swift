@@ -7,9 +7,15 @@ final class TextPrompt: NSPanel, NSWindowDelegate {
   private let field = NSTextField()
 
   /// Nil when the user cancels.
-  static func ask(title: String, label: String, message: String = "") -> String? {
+  static func ask(title: String, label: String, message: String = "", on screen: NSScreen)
+    -> String?
+  {
     let prompt = TextPrompt(title: title, label: label, message: message)
-    prompt.center()
+    let area = screen.visibleFrame
+    prompt.setFrameOrigin(
+      NSPoint(
+        x: area.midX - prompt.frame.width / 2,
+        y: area.midY + area.height / 6 - prompt.frame.height / 2))
     prompt.makeKeyAndOrderFront(nil)
     let response = NSApp.runModal(for: prompt)
     prompt.orderOut(nil)
