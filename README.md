@@ -80,6 +80,7 @@ A URL action can leave parts of its URL to be filled in each time it runs:
 - Letter case doesn't matter: `{Query}` and `{query}` are the same placeholder.
 - A placeholder used more than once in a URL is asked for once.
 - Cancel, <kbd>Esc</kbd> or clicking another app closes the box and opens nothing.
+- The box takes the keyboard, so in sticky mode it closes the panel.
 - Every character outside `A–Z`, `a–z`, `0–9` and `-._~` is percent-encoded, so a value with `&`, `#`, `/` or spaces stays inside the query, path or fragment it lands in.
 - Anything else in braces, such as `{id}` or `{argument name="X" default="Y"}`, is left as written.
 
