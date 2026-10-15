@@ -338,6 +338,96 @@ final class UserConfigTests: XCTestCase {
     XCTAssertTrue(testAlertManager.shownAlerts.first?.message.contains("[o.g]") ?? false)
   }
 
+  // MARK: - Converting to TOML
+
+  func testConvertingWritesTOMLAndLeavesJSONAsItIs() throws {
+    try nestedConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    let jsonBefore = FileManager.default.contents(atPath: jsonPath)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    let loaded = subject.root
+
+    subject.convertToTOML()
+    waitForConfigLoad()
+
+    XCTAssertEqual(subject.format, .toml)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: tomlPath))
+    XCTAssertTrue(subject.root.hasSameConfig(as: loaded))
+    XCTAssertEqual(FileManager.default.contents(atPath: jsonPath), jsonBefore)
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  func testConvertingRefusesWhenTOMLAlreadyExists() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    try tomlConfig.write(toFile: tomlPath, atomically: true, encoding: .utf8)
+
+    subject.convertToTOML()
+
+    XCTAssertEqual(subject.format, .json)
+    XCTAssertEqual(try String(contentsOfFile: tomlPath, encoding: .utf8), tomlConfig)
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 1)
+    XCTAssertTrue(testAlertManager.shownAlerts[0].message.contains("already a config.toml"))
+  }
+
+  func testConvertingRefusesAConfigWithIssues() throws {
+    try duplicateKeysConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+
+    subject.convertToTOML()
+
+    XCTAssertEqual(subject.format, .json)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: tomlPath))
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 1)
+    XCTAssertTrue(testAlertManager.shownAlerts[0].message.contains("same key"))
+  }
+
+  func testConvertingThroughDanglingRelativeSymlinkKeepsLink() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    let destination = "dotfiles/config.toml"
+    try FileManager.default.createSymbolicLink(atPath: tomlPath, withDestinationPath: destination)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    XCTAssertEqual(subject.format, .json)
+
+    subject.convertToTOML()
+    waitForConfigLoad()
+
+    XCTAssertTrue(isSymlink(tomlPath))
+    XCTAssertEqual(
+      try FileManager.default.destinationOfSymbolicLink(atPath: tomlPath), destination)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: tempBaseDir.appending("/" + destination)))
+    XCTAssertEqual(subject.format, .toml)
+    XCTAssertEqual(subject.root.actions.compactMap { $0.item.key }, ["a"])
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  /// Converts a config from outside the repository, which is public, when
+  /// `TEST_RUNNER_LK_ROUNDTRIP_CONFIG` names its `config.json`.
+  func testConvertsTheConfigNamedByLKRoundtripConfig() throws {
+    guard let source = ProcessInfo.processInfo.environment["LK_ROUNDTRIP_CONFIG"], !source.isEmpty
+    else {
+      throw XCTSkip("Set TEST_RUNNER_LK_ROUNDTRIP_CONFIG to a config.json to convert it.")
+    }
+    // A copy, so the test reads the file and never writes it.
+    let original = try Data(contentsOf: URL(fileURLWithPath: source))
+    try original.write(to: URL(fileURLWithPath: jsonPath))
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    XCTAssertEqual(testAlertManager.shownAlerts.map(\.message), [])
+    let loaded = subject.root
+
+    subject.convertToTOML()
+    waitForConfigLoad()
+
+    XCTAssertEqual(testAlertManager.shownAlerts.map(\.message), [])
+    XCTAssertEqual(subject.format, .toml)
+    XCTAssertTrue(subject.root.hasSameConfig(as: loaded), "config.toml did not load back the same")
+    XCTAssertEqual(FileManager.default.contents(atPath: jsonPath), original)
+  }
+
   private let initialConfig = """
     {
       "actions": [{ "key": "a", "type": "url", "value": "https://a.example" }]
@@ -352,6 +442,28 @@ final class UserConfigTests: XCTestCase {
     Action(key: "z", type: .url, value: "https://z.example"))
   private let tomlConfig = """
     b = { url = "https://b.example" }
+    """
+  private let nestedConfig = """
+    {
+      "actions": [
+        { "key": "a", "type": "url", "value": "https://a.example", "label": "A" },
+        {
+          "key": "o", "type": "group", "label": "Open", "actions": [
+            { "key": "s", "type": "application", "value": "/Applications/Safari.app" },
+            { "key": "g", "type": "group", "actions": [] },
+            { "key": "d", "type": "folder", "value": "~/Downloads" }
+          ]
+        }
+      ]
+    }
+    """
+  private let duplicateKeysConfig = """
+    {
+      "actions": [
+        { "key": "a", "type": "application", "value": "/Applications/Safari.app" },
+        { "key": "a", "type": "url", "value": "https://example.com" }
+      ]
+    }
     """
 
   private var jsonPath: String { (tempBaseDir as NSString).appendingPathComponent("config.json") }

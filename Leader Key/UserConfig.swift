@@ -214,6 +214,51 @@ class UserConfig: ObservableObject {
     }
   }
 
+  // MARK: - Converting to TOML
+
+  /// Writes the config as `config.toml` beside `config.json`, which it leaves as it is, then
+  /// reloads so `config.toml` is live. When it cannot, it says why and writes nothing.
+  func convertToTOML() {
+    guard format == .json else { return }
+    if let reason = reasonNotToConvert() {
+      alertHandler.showAlert(style: .warning, message: reason)
+      return
+    }
+
+    let text = TOMLConfig.encode(root)
+    guard (try? TOMLConfig.decode(text))?.hasSameConfig(as: root) == true else {
+      alertHandler.showAlert(
+        style: .warning,
+        message: "Leader Key could not write this config as TOML without changing it, "
+          + "so it did not write config.toml.")
+      return
+    }
+    do {
+      try writeFile(data: Data(text.utf8), to: url(for: .toml))
+    } catch {
+      handleError(error, critical: false)
+      return
+    }
+    reloadFromFile()
+  }
+
+  private func reasonNotToConvert() -> String? {
+    if fileManager.fileExists(atPath: path(for: .toml)) {
+      return "There is already a config.toml in the config directory. "
+        + "Choose Read from file to use it, or move it aside and convert again."
+    }
+    if root == emptyRoot {
+      return "config.json did not load, so there is nothing to convert. "
+        + "Fix it, choose Read from file, and convert again."
+    }
+    if !ConfigValidator.validate(group: root).isEmpty {
+      return "Fix the issues the Config list shows, then convert again. "
+        + "TOML cannot hold two bindings with the same key, "
+        + "and every binding needs a key of its own."
+    }
+    return nil
+  }
+
   // MARK: - Directory Management
 
   static func defaultDirectory() -> String {
