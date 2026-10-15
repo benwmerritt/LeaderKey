@@ -54,7 +54,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NSWindow
 
     NSApp.mainMenu = MainMenu()
 
-    let createdConfig = config.ensureAndLoad()
+    let hadNoConfig = config.ensureAndLoad()
     state = UserState(userConfig: config)
     controller = Controller(userState: state, userConfig: config)
 
@@ -96,7 +96,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NSWindow
     registerGlobalShortcuts()
 
     // Only a first run opens Settings: while it is open, a downloaded update cannot install.
-    if createdConfig {
+    if hadNoConfig {
       showSettings()
     }
   }
@@ -139,6 +139,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NSWindow
 
   func applicationWillTerminate(_ notification: Notification) {
     // Config saves automatically on changes
+  }
+
+  // Opening Leader Key while it runs shows Settings: the way back in for a Mac with neither a
+  // menu-bar icon nor a shortcut.
+  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
+  {
+    showSettings()
+    return false
   }
 
   @IBAction

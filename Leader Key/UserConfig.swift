@@ -35,13 +35,14 @@ class UserConfig: ObservableObject {
 
   // MARK: - Public Interface
 
-  /// Returns whether it wrote the default config because there was none.
+  /// Returns whether there was no config file, as on a Mac's first launch.
   @discardableResult
   func ensureAndLoad() -> Bool {
     ensureValidConfigDirectory()
-    let createdConfig = ensureConfigFileExists()
+    let hadNoConfig = !exists
+    ensureConfigFileExists()
     loadConfig()
-    return createdConfig
+    return hadNoConfig
   }
 
   func reloadFromFile() {
@@ -228,15 +229,13 @@ class UserConfig: ObservableObject {
     fileManager.fileExists(atPath: path)
   }
 
-  private func ensureConfigFileExists() -> Bool {
-    guard !exists else { return false }
+  private func ensureConfigFileExists() {
+    guard !exists else { return }
 
     do {
       try bootstrapConfig()
-      return true
     } catch {
       handleError(error, critical: true)
-      return false
     }
   }
 
