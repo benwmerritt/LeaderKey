@@ -44,6 +44,7 @@ class UserConfig: ObservableObject {
 
   private let alertHandler: AlertHandler
   private let fileManager: FileManager
+  /// The checksum of `config.json` when Leader Key last read or wrote it.
   private var lastReadChecksum: String?
   private(set) var isLoading = false
   private let configIOQueue = DispatchQueue(label: "ConfigIO", qos: .userInitiated)
@@ -482,7 +483,7 @@ class UserConfig: ObservableObject {
         DispatchQueue.main.async {
           guard generation == self.loadGeneration else { return }
           self.root = decodedRoot
-          self.lastReadChecksum = checksum
+          if format == .json { self.lastReadChecksum = checksum }
           self.setValidationErrors(validationErrors)
           self.isLoading = false
 

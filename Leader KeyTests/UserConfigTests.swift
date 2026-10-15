@@ -324,6 +324,25 @@ final class UserConfigTests: XCTestCase {
     XCTAssertEqual(subject.root.actions.compactMap { $0.item.key }, ["a"])
   }
 
+  func testASaveAfterTOMLDoesNotCompareConfigJSONWithConfigTOML() throws {
+    try "{ invalid json }".write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    try tomlConfig.write(toFile: tomlPath, atomically: true, encoding: .utf8)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    XCTAssertEqual(subject.format, .toml)
+
+    try FileManager.default.removeItem(atPath: tomlPath)
+    subject.reloadFromFile()
+    waitForConfigLoad()
+    XCTAssertEqual(subject.format, .json)
+    testAlertManager.reset()
+
+    // Nothing has read or written config.json, so there is nothing for it to conflict with.
+    subject.saveConfig()
+
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
   func testAReloadOvertakenByAnotherDoesNotApply() throws {
     try tomlConfig.write(toFile: tomlPath, atomically: true, encoding: .utf8)
     subject.ensureAndLoad()
