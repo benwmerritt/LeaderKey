@@ -285,13 +285,13 @@ class Controller {
 
   private func openURL(_ action: Action) {
     guard
-      let value = URLTemplate.expand(
-        action.value, fill: { self.value(for: $0, title: action.displayName) })
+      let expanded = URLTemplate.expand(
+        action.value, fill: { self.fillPlaceholder($0, actionTitle: action.displayName) })
     else { return }
 
-    guard let url = URL(string: value) else {
+    guard let url = URL(string: expanded) else {
       showAlert(
-        title: "Invalid URL", message: "Failed to parse URL: \(value)")
+        title: "Invalid URL", message: "Failed to parse URL: \(expanded)")
       return
     }
 
@@ -299,7 +299,7 @@ class Controller {
       showAlert(
         title: "Invalid URL",
         message:
-          "URL is missing protocol (e.g. https://, raycast://): \(value)"
+          "URL is missing protocol (e.g. https://, raycast://): \(expanded)"
       )
       return
     }
@@ -316,16 +316,17 @@ class Controller {
   }
 
   /// Nil when the user cancels.
-  private func value(for placeholder: URLPlaceholder, title: String) -> String? {
+  private func fillPlaceholder(_ placeholder: URLPlaceholder, actionTitle: String) -> String? {
     switch placeholder {
     case .clipboard:
       let text =
         NSPasteboard.general.string(forType: .string)?
         .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       if !text.isEmpty { return text }
-      return TextPrompt.ask(title: title, label: "Text", message: "The clipboard holds no text.")
+      return TextPrompt.ask(
+        title: actionTitle, label: "Text", message: "The clipboard holds no text.")
     case .text(let label):
-      return TextPrompt.ask(title: title, label: label)
+      return TextPrompt.ask(title: actionTitle, label: label)
     }
   }
 

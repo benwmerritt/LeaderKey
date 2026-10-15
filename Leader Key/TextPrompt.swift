@@ -2,8 +2,8 @@ import Cocoa
 
 /// Asks for a line of text. macOS ignores a menu-bar app's request to come to the front, so this
 /// is a non-activating panel like the main window: it takes keyboard focus while another app
-/// stays active.
-final class TextPrompt: NSPanel {
+/// stays active. Like the main window, it goes away when it loses focus, which cancels it.
+final class TextPrompt: NSPanel, NSWindowDelegate {
   private let field = NSTextField()
 
   /// Nil when the user cancels.
@@ -21,6 +21,7 @@ final class TextPrompt: NSPanel {
       contentRect: .zero, styleMask: [.titled, .nonactivatingPanel], backing: .buffered,
       defer: false)
     self.title = title
+    delegate = self
     level = .modalPanel
     hidesOnDeactivate = false
     isReleasedWhenClosed = false
@@ -59,5 +60,9 @@ final class TextPrompt: NSPanel {
 
   @objc private func pressCancel(_ sender: Any?) {
     NSApp.stopModal(withCode: .cancel)
+  }
+
+  func windowDidResignKey(_ notification: Notification) {
+    if NSApp.modalWindow === self { NSApp.stopModal(withCode: .cancel) }
   }
 }

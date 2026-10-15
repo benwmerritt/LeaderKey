@@ -128,9 +128,11 @@ final class URLTemplateTests: XCTestCase {
   }
 
   func testEncodesEverythingOutsideTheUnreservedSet() {
-    let value = "AZaz09-._~ &#/?=+%😀"
+    let value = "AZaz09-._~ &#/?=+%!'()*;:@,$é😀"
     let (result, _) = expand("{query}", with: [.text(label: "Query"): value])
-    XCTAssertEqual(result, "AZaz09-._~%20%26%23%2F%3F%3D%2B%25%F0%9F%98%80")
+    XCTAssertEqual(
+      result,
+      "AZaz09-._~%20%26%23%2F%3F%3D%2B%25%21%27%28%29%2A%3B%3A%40%2C%24%C3%A9%F0%9F%98%80")
   }
 
   func testValueCannotBreakTheURL() throws {
