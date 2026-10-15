@@ -6,7 +6,7 @@
 #   BUILD_NUMBER   CFBundleVersion; default: git rev-list --count HEAD, as for releases, so
 #                  Sparkle compares this build with releases by commit count. Without git
 #                  history the project's own build number stays, and a warning says so.
-#   DEVELOPER_DIR  honoured; default: /Applications/Xcode.app
+#   DEVELOPER_DIR  honoured; default: /Applications/Xcode.app/Contents/Developer
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
