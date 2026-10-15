@@ -284,9 +284,14 @@ class Controller {
   }
 
   private func openURL(_ action: Action) {
-    guard let url = URL(string: action.value) else {
+    guard
+      let value = URLTemplate.expand(
+        action.value, fill: { self.value(for: $0, title: action.displayName) })
+    else { return }
+
+    guard let url = URL(string: value) else {
       showAlert(
-        title: "Invalid URL", message: "Failed to parse URL: \(action.value)")
+        title: "Invalid URL", message: "Failed to parse URL: \(value)")
       return
     }
 
@@ -294,7 +299,7 @@ class Controller {
       showAlert(
         title: "Invalid URL",
         message:
-          "URL is missing protocol (e.g. https://, raycast://): \(action.value)"
+          "URL is missing protocol (e.g. https://, raycast://): \(value)"
       )
       return
     }
@@ -307,6 +312,20 @@ class Controller {
       NSWorkspace.shared.open(
         url,
         configuration: DontActivateConfiguration.shared.configuration)
+    }
+  }
+
+  /// Nil when the user cancels.
+  private func value(for placeholder: URLPlaceholder, title: String) -> String? {
+    switch placeholder {
+    case .clipboard:
+      let text =
+        NSPasteboard.general.string(forType: .string)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      if !text.isEmpty { return text }
+      return TextPrompt.ask(title: title, label: "Text", message: "The clipboard holds no text.")
+    case .text(let label):
+      return TextPrompt.ask(title: title, label: label)
     }
   }
 
