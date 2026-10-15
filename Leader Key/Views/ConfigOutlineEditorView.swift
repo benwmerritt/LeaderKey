@@ -13,6 +13,8 @@ import UniformTypeIdentifiers
 
 struct ConfigOutlineEditorView: NSViewRepresentable {
   @Binding var root: Group
+  /// When false the tree can be browsed but not changed: every control that edits is disabled.
+  var isEditable = true
   var onChange: ((Group) -> Void)? = nil
   @EnvironmentObject private var userConfig: UserConfig
 
@@ -23,6 +25,7 @@ struct ConfigOutlineEditorView: NSViewRepresentable {
       root = updatedRoot
     }
     controller.userConfig = userConfig
+    controller.isEditable = isEditable
     context.coordinator.controller = controller
 
     let scroll = NSScrollView()
@@ -38,6 +41,7 @@ struct ConfigOutlineEditorView: NSViewRepresentable {
 
   func updateNSView(_ nsView: NSScrollView, context: Context) {
     context.coordinator.controller?.userConfig = userConfig
+    context.coordinator.controller?.isEditable = isEditable
     context.coordinator.controller?.render(root: root)
   }
 
@@ -66,6 +70,12 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
     }
   }
   private var observers: [NSObjectProtocol] = []
+  /// Rows are rebuilt when this changes, so their controls pick it up.
+  var isEditable = true {
+    didSet {
+      if isEditable != oldValue { outline.reloadData() }
+    }
+  }
   private var didApplyInitialExpansion = false
   private let expandedDefaultsKey = "ConfigOutlineEditor.ExpandedIndexPaths"
   private let dragType = NSPasteboard.PasteboardType("com.leaderkey.node")
@@ -183,6 +193,7 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
       cell.configure(
         node: node,
         validationError: userConfig?.validationError(at: path),
+        isEditable: isEditable,
         onChange: { [weak self] payload in
           guard let self = self else { return }
           node.apply(payload)
@@ -226,6 +237,7 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
       cell.configure(
         node: node,
         validationError: userConfig?.validationError(at: path),
+        isEditable: isEditable,
         onChange: { [weak self] payload in
           guard let self = self else { return }
           node.apply(payload)
@@ -387,7 +399,7 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
   func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any)
     -> NSPasteboardWriting?
   {
-    guard let node = item as? EditorNode else { return nil }
+    guard isEditable, let node = item as? EditorNode else { return nil }
     let pb = NSPasteboardItem()
     pb.setString(node.id.uuidString, forType: dragType)
     return pb
@@ -471,6 +483,7 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
 
   // MARK: Sort A→Z
   private func sortAll() {
+    guard isEditable else { return }
     let expansionIDs = collectExpandedIDs()
 
     func sortRec(_ node: EditorNode) {
@@ -526,6 +539,7 @@ private class ActionCellView: NSTableCellView, NSWindowDelegate {
   private var onDuplicate: (() -> Void)?
   private var node: EditorNode?
   private var currentValidationError: ValidationErrorType?
+  private var isEditable = true
   private var symbolWindow: NSWindow?
   private weak var symbolParent: NSWindow?
 
@@ -604,15 +618,19 @@ private class ActionCellView: NSTableCellView, NSWindowDelegate {
   }
 
   func configure(
-    node: EditorNode, validationError: ValidationErrorType? = nil,
+    node: EditorNode, validationError: ValidationErrorType? = nil, isEditable: Bool,
     onChange: @escaping (EditorPayload) -> Void, onDelete: @escaping () -> Void,
     onDuplicate: @escaping () -> Void
   ) {
     self.node = node
     self.currentValidationError = validationError
+    self.isEditable = isEditable
     self.onChange = onChange
     self.onDelete = onDelete
     self.onDuplicate = onDuplicate
+    for control in [keyButton, typePopup, iconButton, labelButton, moreBtn] {
+      control.isEnabled = isEditable
+    }
     guard case .action(let action) = node.kind else { return }
 
     updateButtons(for: action)
@@ -692,9 +710,11 @@ private class ActionCellView: NSTableCellView, NSWindowDelegate {
         self?.updateIcon(for: a)
       }
       let label = Self.valueLabel(text: descriptor.display)
+      choose.isEnabled = isEditable
       for v in [choose, label] { valueStack.addArrangedSubview(v) }
     case .prompt(let promptTitle):
       let edit = Self.editButton(width: Layout.chooserWidth)
+      edit.isEnabled = isEditable
       edit.targetClosure { [weak self] in
         self?.promptText(title: promptTitle, initial: action.value) { text in
           guard var a = self?.currentAction() else { return }
@@ -1059,7 +1079,7 @@ private class GroupCellView: NSTableCellView, NSWindowDelegate {
   }
 
   func configure(
-    node: EditorNode, validationError: ValidationErrorType? = nil,
+    node: EditorNode, validationError: ValidationErrorType? = nil, isEditable: Bool,
     onChange: @escaping (EditorPayload) -> Void, onDelete: @escaping () -> Void,
     onDuplicate: @escaping () -> Void, onAddAction: @escaping () -> Void,
     onAddGroup: @escaping () -> Void
@@ -1071,6 +1091,10 @@ private class GroupCellView: NSTableCellView, NSWindowDelegate {
     self.onDuplicate = onDuplicate
     self.onAddAction = onAddAction
     self.onAddGroup = onAddGroup
+    // The global shortcut recorder stays enabled: it sets a shortcut, not the config.
+    for control in [keyButton, iconButton, labelButton, addActionBtn, addGroupBtn, moreBtn] {
+      control.isEnabled = isEditable
+    }
     guard case .group(let group) = node.kind else { return }
     updateButtons(for: group)
     updateIcon(for: group)

@@ -17,7 +17,7 @@ struct GeneralPane: View {
       ) {
         VStack(alignment: .leading, spacing: 8) {
           // AppKit-backed editor for maximum smoothness
-          ConfigOutlineEditorView(root: $config.root)
+          ConfigOutlineEditorView(root: $config.root, isEditable: config.format.isEditable)
             .frame(height: 500)
             .overlay(
               RoundedRectangle(cornerRadius: 12)
@@ -25,6 +25,15 @@ struct GeneralPane: View {
                 .stroke(Color.primary, lineWidth: 1)
                 .opacity(0.1)
             )
+
+          if !config.format.isEditable {
+            Text(
+              "You edit config.toml by hand, so this list is read-only. "
+                + "After editing it, choose Read from file."
+            )
+            .font(.callout)
+            .foregroundColor(.secondary)
+          }
 
           if !config.validationErrors.isEmpty {
             ValidationWarningView(errors: config.validationErrors)
@@ -40,6 +49,7 @@ struct GeneralPane: View {
                 Image(systemName: "rays")
                 Text("Add Action")
               }
+              .disabled(!config.format.isEditable)
 
               Button(action: {
                 config.root.actions.append(.group(Group(key: "", actions: [])))
@@ -47,6 +57,7 @@ struct GeneralPane: View {
                 Image(systemName: "folder")
                 Text("Add Group")
               }
+              .disabled(!config.format.isEditable)
 
               Divider()
                 .frame(height: 20)
@@ -80,6 +91,7 @@ struct GeneralPane: View {
                 Image(systemName: "arrow.up.arrow.down")
                 Text("Sort")
               }
+              .disabled(!config.format.isEditable)
             }
           }
         }
