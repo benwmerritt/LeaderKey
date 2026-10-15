@@ -5,7 +5,7 @@
 # Non-interactive: prints "checks passed" on success, exits non-zero on failure.
 #
 # Environment:
-#   DEVELOPER_DIR  honoured; default: /Applications/Xcode.app
+#   DEVELOPER_DIR  honoured; default: /Applications/Xcode.app/Contents/Developer
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
