@@ -44,6 +44,23 @@ struct AdvancedPane: View {
             configDir = UserConfig.defaultDirectory()
           }
         }
+        if config.format == .toml {
+          Text(
+            "Leader Key reads config.toml here, and ignores config.json while config.toml exists."
+          )
+          .font(.callout)
+          .foregroundColor(.secondary)
+        } else {
+          Button("Convert to TOML") {
+            config.convertToTOML()
+          }
+          Text(
+            "Leader Key reads config.json here. Convert to TOML writes the same config to "
+              + "config.toml beside it and switches to that file, leaving config.json as it is."
+          )
+          .font(.callout)
+          .foregroundColor(.secondary)
+        }
       }
 
       Settings.Section(

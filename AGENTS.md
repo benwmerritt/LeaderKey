@@ -29,7 +29,7 @@ Leader Key is a macOS application that provides customizable keyboard shortcuts.
 
 - `AppDelegate`: Application lifecycle, global shortcuts registration, URL scheme handling, the Sparkle updater
 - `Controller`: Central event handling, manages key sequences and window display
-- `UserConfig`: JSON configuration management with validation
+- `UserConfig`: JSON or TOML configuration management with validation
 - `UserState`: Tracks navigation through key sequences
 - `MainWindow`: Base class for theme windows
 
@@ -42,6 +42,7 @@ Leader Key is a macOS application that provides customizable keyboard shortcuts.
 **Configuration Flow:**
 
 - Config stored at `~/Library/Application Support/Leader Key/config.json`; a symlink there is written through, so a dotfiles manager can own the file
+- A `config.toml` beside it wins for as long as it exists (`ConfigFormat`, codec in `TOMLConfig.swift`). It is hand-edited: while it is live `UserConfig` writes neither file and the Settings editor is read-only
 - Config reloads only on request: the menu-bar "Reload config" item, the Settings "Read from file" button, `leaderkey://config-reload`, and the save-conflict alert's "Read from File". Nothing watches the file
 - `ConfigValidator` ensures no key conflicts
 - Actions support: applications, URLs, commands, folders

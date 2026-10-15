@@ -1,6 +1,57 @@
 # About this fork
 
-This is [benwmerritt](https://github.com/benwmerritt)'s personal build of [mikker/LeaderKey](https://github.com/mikker/LeaderKey): the same app and bundle ID, built and signed by this fork's GitHub Actions with a self-signed certificate. Updates come from [this fork's releases](https://github.com/benwmerritt/LeaderKey/releases): the app's Sparkle updater reads their feed, downloads new versions in the background and installs them by relaunching Leader Key while its panel and Settings are closed. Nothing is notarised, so a Mac gets its first copy through `bin/install` (after `bin/build`, or from a release zip) rather than by double-clicking a download. Everything below is upstream's README, except [placeholders in URL actions](#placeholders-in-url-actions), which only this fork has.
+This is [benwmerritt](https://github.com/benwmerritt)'s personal build of [mikker/LeaderKey](https://github.com/mikker/LeaderKey): the same app and bundle ID, built and signed by this fork's GitHub Actions with a self-signed certificate. Updates come from [this fork's releases](https://github.com/benwmerritt/LeaderKey/releases): the app's Sparkle updater reads their feed, downloads new versions in the background and installs them by relaunching Leader Key while its panel and Settings are closed. Nothing is notarised, so a Mac gets its first copy through `bin/install` (after `bin/build`, or from a release zip) rather than by double-clicking a download. The fork also reads a [TOML config](#a-toml-config). Everything after that section is upstream's README, except [placeholders in URL actions](#placeholders-in-url-actions), which only this fork has.
+
+## A TOML config
+
+Leader Key keeps its config in `config.json`, in the config directory that Settings → Advanced shows. Put a `config.toml` beside it and Leader Key reads that instead, ignoring `config.json` for as long as `config.toml` exists. To go back, delete or rename `config.toml` and choose Read from file. A `config.toml` that doesn't load shows its error, the way a broken `config.json` does; Leader Key never quietly falls back to `config.json`.
+
+The quickest start is the Convert to TOML button in Settings → Advanced. It writes your current config as `config.toml` beside `config.json`, leaves `config.json` as it is, and switches to the new file. It refuses, and says why, when a `config.toml` is already there or the config has issues to fix first.
+
+Each menu is a table named by the keys that open it, and each binding in it is named by the key you press:
+
+```toml
+t = { app = "/System/Applications/Utilities/Terminal.app" }
+
+[o]
+label = "Open"
+icon = "folder"
+s   = { app = "/Applications/Safari.app" }
+d   = { folder = "~/Downloads", label = "Downloads" }
+"," = { url = "x-apple.systempreferences:", label = "System Settings" }
+
+[o.m]
+label = "Messages"
+m = { app = "/System/Applications/Messages.app" }
+w = { url = "https://web.whatsapp.com/", label = "WhatsApp" }
+
+[r]
+h = { cmd = 'say "hello"' }
+```
+
+Here <kbd>leader</kbd><kbd>o</kbd><kbd>m</kbd><kbd>w</kbd> opens WhatsApp.
+
+- A binding holds exactly one of `app` (an application's path), `url`, `cmd` (a shell command) or `folder`, which says what it does, plus an optional `label` (the name shown for it) and `icon` (an SF Symbol name, or the path of an app whose icon to use).
+- A table with none of those four is a menu. Its own `label` and `icon` describe it, and every other key in it is a binding.
+- A key that isn't a letter, digit, `-` or `_` goes in quotes: `","`, `"["`, `"'"`. Special keys go by name: `space`, `enter`, `tab`, `delete`, `left`, `right`, `up` and `down`.
+- A string in single quotes is taken literally, which saves escaping a command full of double quotes or backslashes.
+- File order is menu order. TOML puts a table's own lines before the tables inside it, so a binding that comes after a submenu can't be a one-liner in its menu's table and gets a section of its own instead. This `o` menu lists Safari, then the Messages menu, then Downloads:
+
+  ```toml
+  [o]
+  s = { app = "/Applications/Safari.app" }
+
+  [o.m]
+  m = { app = "/System/Applications/Messages.app" }
+
+  [o.d]
+  folder = "~/Downloads"
+  ```
+
+  You can write every binding that way if you prefer; the two styles mix freely.
+- Writing the same key twice in one menu is a load error, and the error names the line.
+
+While `config.toml` is live, the Config list in Settings is read-only: browse it there, edit the file, then choose Read from file (or run `open "leaderkey://config-reload"`). Reveal in Settings, Show config in Finder in the menu bar and `leaderkey://config-reveal` all show `config.toml`.
 
 ---
 
@@ -70,6 +121,8 @@ A URL action can leave parts of its URL to be filled in each time it runs:
 ```json
 { "key": "g", "type": "url", "label": "Search Google", "value": "https://google.com/search?q={query}" }
 ```
+
+In a [TOML config](#a-toml-config) that is `g = { url = "https://google.com/search?q={query}", label = "Search Google" }`. A named placeholder brings its own double quotes, so put that URL in single quotes: `url = 'https://en.wikipedia.org/wiki/{argument name="Topic"}'`.
 
 | Placeholder | Filled with |
 |---|---|

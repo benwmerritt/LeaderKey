@@ -264,6 +264,256 @@ final class UserConfigTests: XCTestCase {
     XCTAssertTrue(testAlertManager.shownAlerts[0].message.contains("changed on disk"))
   }
 
+  // MARK: - TOML config
+
+  func testTOMLWinsWhenBothFilesExist() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    try tomlConfig.write(toFile: tomlPath, atomically: true, encoding: .utf8)
+
+    XCTAssertFalse(subject.ensureAndLoad())
+    waitForConfigLoad()
+
+    XCTAssertEqual(subject.format, .toml)
+    XCTAssertEqual(subject.path, tomlPath)
+    XCTAssertEqual(subject.root.actions.compactMap { $0.item.key }, ["b"])
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  func testOnlyJSONLoadsJSON() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+
+    XCTAssertEqual(subject.format, .json)
+    XCTAssertEqual(subject.path, jsonPath)
+    XCTAssertEqual(subject.root.actions.compactMap { $0.item.key }, ["a"])
+    XCTAssertFalse(FileManager.default.fileExists(atPath: tomlPath))
+  }
+
+  func testWritesNeitherFileWhileTOMLIsLive() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    try tomlConfig.write(toFile: tomlPath, atomically: true, encoding: .utf8)
+    let jsonBefore = FileManager.default.contents(atPath: jsonPath)
+    let tomlBefore = FileManager.default.contents(atPath: tomlPath)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+
+    subject.root.actions.append(addedAction)
+    subject.saveConfig()
+    // Wait out the 300 ms debounce an edit to `root` would save after.
+    RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+
+    XCTAssertEqual(FileManager.default.contents(atPath: jsonPath), jsonBefore)
+    XCTAssertEqual(FileManager.default.contents(atPath: tomlPath), tomlBefore)
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  func testDeletingTOMLAndReloadingSwitchesBackToJSON() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    try tomlConfig.write(toFile: tomlPath, atomically: true, encoding: .utf8)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    XCTAssertEqual(subject.format, .toml)
+
+    try FileManager.default.removeItem(atPath: tomlPath)
+    subject.reloadFromFile()
+    waitForConfigLoad()
+
+    XCTAssertEqual(subject.format, .json)
+    XCTAssertEqual(subject.root.actions.compactMap { $0.item.key }, ["a"])
+  }
+
+  func testASaveAfterTOMLDoesNotCompareConfigJSONWithConfigTOML() throws {
+    try "{ invalid json }".write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    try tomlConfig.write(toFile: tomlPath, atomically: true, encoding: .utf8)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    XCTAssertEqual(subject.format, .toml)
+
+    try FileManager.default.removeItem(atPath: tomlPath)
+    subject.reloadFromFile()
+    waitForConfigLoad()
+    XCTAssertEqual(subject.format, .json)
+    testAlertManager.reset()
+
+    // Nothing has read or written config.json, so there is nothing for it to conflict with.
+    subject.saveConfig()
+
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  func testAReloadOvertakenByAnotherDoesNotApply() throws {
+    try tomlConfig.write(toFile: tomlPath, atomically: true, encoding: .utf8)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    XCTAssertEqual(subject.format, .toml)
+
+    // The first reload reads config.toml in the background; the second finds neither file.
+    subject.reloadFromFile()
+    try FileManager.default.removeItem(atPath: tomlPath)
+    subject.reloadFromFile()
+    waitForConfigLoad()
+    // Wait out the 300 ms debounce a stale tree landing in `root` would save after.
+    RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+
+    XCTAssertEqual(subject.format, .json)
+    XCTAssertEqual(subject.root, emptyRoot)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: jsonPath))
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  func testBrokenTOMLShowsItsErrorAndDoesNotFallBackToJSON() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    try "[o]\ng = { app = 1 }\n".write(toFile: tomlPath, atomically: true, encoding: .utf8)
+
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+
+    XCTAssertEqual(subject.format, .toml)
+    XCTAssertEqual(subject.root, emptyRoot)
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 1)
+    XCTAssertEqual(testAlertManager.shownAlerts.first?.style, .warning)
+    XCTAssertTrue(testAlertManager.shownAlerts.first?.message.contains("[o.g]") ?? false)
+  }
+
+  func testBrokenTOMLOnReloadStopsUsingTheJSONTree() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    XCTAssertEqual(subject.root.actions.compactMap { $0.item.key }, ["a"])
+
+    try "[o]\ng = { app = 1 }\n".write(toFile: tomlPath, atomically: true, encoding: .utf8)
+    subject.reloadFromFile()
+    waitForConfigLoad()
+
+    XCTAssertEqual(subject.format, .toml)
+    XCTAssertEqual(subject.root, emptyRoot)
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 1)
+  }
+
+  func testASaveScheduledBeforeTOMLGoesLiveWritesNothing() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    let jsonBefore = FileManager.default.contents(atPath: jsonPath)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+
+    subject.root.actions.append(addedAction)
+    try tomlConfig.write(toFile: tomlPath, atomically: true, encoding: .utf8)
+    subject.reloadFromFile()
+    waitForConfigLoad()
+    // Wait out the 300 ms debounce the edit was scheduled to save after.
+    RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+
+    XCTAssertEqual(subject.format, .toml)
+    XCTAssertEqual(FileManager.default.contents(atPath: jsonPath), jsonBefore)
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  // MARK: - Converting to TOML
+
+  func testConvertingWritesTOMLAndLeavesJSONAsItIs() throws {
+    try nestedConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    let jsonBefore = FileManager.default.contents(atPath: jsonPath)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    let loaded = subject.root
+
+    subject.convertToTOML()
+    waitForConfigLoad()
+
+    XCTAssertEqual(subject.format, .toml)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: tomlPath))
+    XCTAssertTrue(subject.root.hasSameConfig(as: loaded))
+    XCTAssertEqual(FileManager.default.contents(atPath: jsonPath), jsonBefore)
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  func testConvertingRefusesWhenTOMLAlreadyExists() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    try tomlConfig.write(toFile: tomlPath, atomically: true, encoding: .utf8)
+
+    subject.convertToTOML()
+
+    XCTAssertEqual(subject.format, .json)
+    XCTAssertEqual(try String(contentsOfFile: tomlPath, encoding: .utf8), tomlConfig)
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 1)
+    XCTAssertTrue(testAlertManager.shownAlerts[0].message.contains("already a config.toml"))
+  }
+
+  func testConvertingRefusesWhenConfigJSONChangedOnDisk() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    try externalConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+
+    subject.convertToTOML()
+
+    XCTAssertEqual(subject.format, .json)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: tomlPath))
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 1)
+    XCTAssertTrue(testAlertManager.shownAlerts[0].message.contains("no longer matches"))
+  }
+
+  func testConvertingRefusesAConfigWithIssues() throws {
+    try duplicateKeysConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+
+    subject.convertToTOML()
+
+    XCTAssertEqual(subject.format, .json)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: tomlPath))
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 1)
+    XCTAssertTrue(testAlertManager.shownAlerts[0].message.contains("same key"))
+  }
+
+  func testConvertingThroughDanglingRelativeSymlinkKeepsLink() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    let destination = "dotfiles/config.toml"
+    try FileManager.default.createSymbolicLink(atPath: tomlPath, withDestinationPath: destination)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    XCTAssertEqual(subject.format, .json)
+
+    subject.convertToTOML()
+    waitForConfigLoad()
+
+    XCTAssertTrue(isSymlink(tomlPath))
+    XCTAssertEqual(
+      try FileManager.default.destinationOfSymbolicLink(atPath: tomlPath), destination)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: tempBaseDir.appending("/" + destination)))
+    XCTAssertEqual(subject.format, .toml)
+    XCTAssertEqual(subject.root.actions.compactMap { $0.item.key }, ["a"])
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
+  /// Converts a config from outside the repository, which is public, when
+  /// `TEST_RUNNER_LK_ROUNDTRIP_CONFIG` names its `config.json`.
+  func testConvertsTheConfigNamedByLKRoundtripConfig() throws {
+    guard let source = ProcessInfo.processInfo.environment["LK_ROUNDTRIP_CONFIG"], !source.isEmpty
+    else {
+      throw XCTSkip("Set TEST_RUNNER_LK_ROUNDTRIP_CONFIG to a config.json to convert it.")
+    }
+    // A copy, so the test reads the file and never writes it.
+    let original = try Data(contentsOf: URL(fileURLWithPath: source))
+    try original.write(to: URL(fileURLWithPath: jsonPath))
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    XCTAssertEqual(testAlertManager.shownAlerts.map(\.message), [])
+    let loaded = subject.root
+
+    subject.convertToTOML()
+    waitForConfigLoad()
+
+    XCTAssertEqual(testAlertManager.shownAlerts.map(\.message), [])
+    XCTAssertEqual(subject.format, .toml)
+    XCTAssertTrue(subject.root.hasSameConfig(as: loaded), "config.toml did not load back the same")
+    XCTAssertEqual(FileManager.default.contents(atPath: jsonPath), original)
+  }
+
   private let initialConfig = """
     {
       "actions": [{ "key": "a", "type": "url", "value": "https://a.example" }]
@@ -276,6 +526,34 @@ final class UserConfigTests: XCTestCase {
     """
   private let addedAction = ActionOrGroup.action(
     Action(key: "z", type: .url, value: "https://z.example"))
+  private let tomlConfig = """
+    b = { url = "https://b.example" }
+    """
+  private let nestedConfig = """
+    {
+      "actions": [
+        { "key": "a", "type": "url", "value": "https://a.example", "label": "A" },
+        {
+          "key": "o", "type": "group", "label": "Open", "actions": [
+            { "key": "s", "type": "application", "value": "/Applications/Safari.app" },
+            { "key": "g", "type": "group", "actions": [] },
+            { "key": "d", "type": "folder", "value": "~/Downloads" }
+          ]
+        }
+      ]
+    }
+    """
+  private let duplicateKeysConfig = """
+    {
+      "actions": [
+        { "key": "a", "type": "application", "value": "/Applications/Safari.app" },
+        { "key": "a", "type": "url", "value": "https://example.com" }
+      ]
+    }
+    """
+
+  private var jsonPath: String { (tempBaseDir as NSString).appendingPathComponent("config.json") }
+  private var tomlPath: String { (tempBaseDir as NSString).appendingPathComponent("config.toml") }
 
   /// Writes `initialConfig` to `<temp>/dotfiles/config.json` and points `<temp>/config.json`
   /// at it through a relative symlink, the shape stow and similar tools produce.
