@@ -49,7 +49,7 @@ Here <kbd>leader</kbd><kbd>o</kbd><kbd>m</kbd><kbd>w</kbd> opens WhatsApp.
   ```
 
   You can write every binding that way if you prefer; the two styles mix freely.
-- Using a key twice in one menu is a load error, and the error names the line.
+- Writing the same key twice in one menu is a load error, and the error names the line.
 
 While `config.toml` is live, the Config list in Settings is read-only: browse it there, edit the file, then choose Read from file (or run `open "leaderkey://config-reload"`). Reveal in Settings, Show config in Finder in the menu bar and `leaderkey://config-reveal` all show `config.toml`.
 

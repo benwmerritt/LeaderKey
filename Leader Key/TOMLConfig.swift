@@ -31,8 +31,9 @@ enum TOMLConfig {
         throw TOMLConfigError.binding(
           path: childPath,
           problem:
-            "must be a table, such as \(tomlKey(childKey)) = { app = \"/Applications/Safari.app\" }."
-            + " A group's own fields are label and icon.")
+            "is not a binding. In a menu every key other than label and icon is a binding, "
+            + "a table with one of app, url, cmd or folder, such as "
+            + "\(tomlKey(childKey)) = { app = \"/Applications/Safari.app\" }.")
       }
       actions.append(try binding(child, key: childKey, path: childPath))
     }

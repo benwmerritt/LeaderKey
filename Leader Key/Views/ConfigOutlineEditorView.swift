@@ -410,13 +410,13 @@ private class OutlineController: NSObject, NSOutlineViewDataSource, NSOutlineVie
     proposedChildIndex index: Int
   ) -> NSDragOperation {
     // Be permissive; we will normalize the target in acceptDrop
-    return .move
+    return isEditable ? .move : []
   }
 
   func outlineView(
     _ outlineView: NSOutlineView, acceptDrop info: NSDraggingInfo, item: Any?, childIndex: Int
   ) -> Bool {
-    guard let str = info.draggingPasteboard.string(forType: dragType),
+    guard isEditable, let str = info.draggingPasteboard.string(forType: dragType),
       let dragged = findNode(by: str)
     else { return false }
 

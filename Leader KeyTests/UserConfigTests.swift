@@ -358,6 +358,39 @@ final class UserConfigTests: XCTestCase {
     XCTAssertTrue(testAlertManager.shownAlerts.first?.message.contains("[o.g]") ?? false)
   }
 
+  func testBrokenTOMLOnReloadStopsUsingTheJSONTree() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    XCTAssertEqual(subject.root.actions.compactMap { $0.item.key }, ["a"])
+
+    try "[o]\ng = { app = 1 }\n".write(toFile: tomlPath, atomically: true, encoding: .utf8)
+    subject.reloadFromFile()
+    waitForConfigLoad()
+
+    XCTAssertEqual(subject.format, .toml)
+    XCTAssertEqual(subject.root, emptyRoot)
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 1)
+  }
+
+  func testASaveScheduledBeforeTOMLGoesLiveWritesNothing() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    let jsonBefore = FileManager.default.contents(atPath: jsonPath)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+
+    subject.root.actions.append(addedAction)
+    try tomlConfig.write(toFile: tomlPath, atomically: true, encoding: .utf8)
+    subject.reloadFromFile()
+    waitForConfigLoad()
+    // Wait out the 300 ms debounce the edit was scheduled to save after.
+    RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+
+    XCTAssertEqual(subject.format, .toml)
+    XCTAssertEqual(FileManager.default.contents(atPath: jsonPath), jsonBefore)
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
+  }
+
   // MARK: - Converting to TOML
 
   func testConvertingWritesTOMLAndLeavesJSONAsItIs() throws {
@@ -389,6 +422,20 @@ final class UserConfigTests: XCTestCase {
     XCTAssertEqual(try String(contentsOfFile: tomlPath, encoding: .utf8), tomlConfig)
     XCTAssertEqual(testAlertManager.shownAlerts.count, 1)
     XCTAssertTrue(testAlertManager.shownAlerts[0].message.contains("already a config.toml"))
+  }
+
+  func testConvertingRefusesWhenConfigJSONChangedOnDisk() throws {
+    try initialConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+    subject.ensureAndLoad()
+    waitForConfigLoad()
+    try externalConfig.write(toFile: jsonPath, atomically: true, encoding: .utf8)
+
+    subject.convertToTOML()
+
+    XCTAssertEqual(subject.format, .json)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: tomlPath))
+    XCTAssertEqual(testAlertManager.shownAlerts.count, 1)
+    XCTAssertTrue(testAlertManager.shownAlerts[0].message.contains("no longer matches"))
   }
 
   func testConvertingRefusesAConfigWithIssues() throws {

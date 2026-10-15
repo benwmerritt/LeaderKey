@@ -143,7 +143,9 @@ class UserConfig: ObservableObject {
         let jsonData = try encoder.encode(currentRoot)
 
         // Check conflicts on background queue first, then switch to main for UI
-        if let lastChecksum = self.lastReadChecksum, self.exists {
+        if let lastChecksum = self.lastReadChecksum,
+          self.fileManager.fileExists(atPath: self.path(for: .json))
+        {
           let currentChecksum = self.getCurrentFileChecksum()
           if currentChecksum != lastChecksum {
             DispatchQueue.main.async {
@@ -253,6 +255,12 @@ class UserConfig: ObservableObject {
       return "config.json did not load, so there is nothing to convert. "
         + "Fix it, choose Read from file, and convert again."
     }
+    let onDisk = try? ConfigFormat.json.decode(readFile(.json))
+    guard onDisk?.hasSameConfig(as: root) == true else {
+      return "config.json no longer matches the Config list in Settings, "
+        + "because it changed outside Leader Key or a change in Settings is still saving. "
+        + "Choose Read from file, then convert again."
+    }
     if !ConfigValidator.validate(group: root).isEmpty {
       return "Fix the issues the Config list shows, then convert again. "
         + "TOML cannot hold two bindings with the same key, "
@@ -326,6 +334,11 @@ class UserConfig: ObservableObject {
       saveWorkItem?.cancel()
       // A config.json write already handed to the I/O queue finishes before config.toml is live.
       configIOQueue.sync {}
+    }
+    if detected != format {
+      // The tree loaded from the other file must not stay in use, even if this one fails to load.
+      root = emptyRoot
+      setValidationErrors([])
     }
     format = detected
   }

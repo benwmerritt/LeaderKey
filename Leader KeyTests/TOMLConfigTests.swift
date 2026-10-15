@@ -121,7 +121,7 @@ final class TOMLConfigTests: XCTestCase {
       [o]
       s = "/Applications/Safari.app"
       """,
-      names: "[o.s]", "must be a table")
+      names: "[o.s]", "is not a binding")
   }
 
   func testRejectsAnActionWithBindings() {
