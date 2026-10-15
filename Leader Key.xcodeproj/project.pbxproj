@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7A0E1D012E9F000100C0FFEE /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = 7A0E1D022E9F000100C0FFEE /* TOMLDecoder */; };
 		115AA5BF2DA521C600C17E18 /* ActionIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115AA5BE2DA521C200C17E18 /* ActionIcon.swift */; };
 		115AA5C22DA546D500C17E18 /* SymbolPicker in Frameworks */ = {isa = PBXBuildFile; productRef = 115AA5C12DA546D500C17E18 /* SymbolPicker */; };
 		423632262D68CDBB00878D92 /* Mini.swift in Sources */ = {isa = PBXBuildFile; fileRef = 423632252D68CDBB00878D92 /* Mini.swift */; };
@@ -121,6 +122,7 @@
 				42E70A572C823FF200FCF902 /* Sparkle in Frameworks */,
 				427C18232BD31DF100955B98 /* Settings in Frameworks */,
 				115AA5C22DA546D500C17E18 /* SymbolPicker in Frameworks */,
+				7A0E1D012E9F000100C0FFEE /* TOMLDecoder in Frameworks */,
 				427C181A2BD3123C00955B98 /* Defaults in Frameworks */,
 				4279AFED2C6A175500952A83 /* LaunchAtLogin in Frameworks */,
 				427C18172BD311ED00955B98 /* KeyboardShortcuts in Frameworks */,
@@ -285,6 +287,7 @@
 				42E70A562C823FF200FCF902 /* Sparkle */,
 				115AA5C12DA546D500C17E18 /* SymbolPicker */,
 				FBCA04D82D9F02F700271163 /* Kingfisher */,
+				7A0E1D022E9F000100C0FFEE /* TOMLDecoder */,
 			);
 			productName = "Leader Key";
 			productReference = 427C17E72BD311B400955B98 /* Leader Key.app */;
@@ -345,6 +348,7 @@
 				4236321C2D6799B900878D92 /* XCRemoteSwiftPackageReference "SwiftFormatPlugins" */,
 				115AA5C02DA5463700C17E18 /* XCRemoteSwiftPackageReference "SymbolPicker" */,
 				FB00D5262D824E2C00A37486 /* XCRemoteSwiftPackageReference "Kingfisher" */,
+				7A0E1D032E9F000100C0FFEE /* XCRemoteSwiftPackageReference "TOMLDecoder" */,
 			);
 			productRefGroup = 427C17E82BD311B400955B98 /* Products */;
 			projectDirPath = "";
@@ -729,6 +733,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		7A0E1D032E9F000100C0FFEE /* XCRemoteSwiftPackageReference "TOMLDecoder" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/dduan/TOMLDecoder";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.4.5;
+			};
+		};
 		115AA5C02DA5463700C17E18 /* XCRemoteSwiftPackageReference "SymbolPicker" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/xnth97/SymbolPicker";
@@ -796,6 +808,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		7A0E1D022E9F000100C0FFEE /* TOMLDecoder */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7A0E1D032E9F000100C0FFEE /* XCRemoteSwiftPackageReference "TOMLDecoder" */;
+			productName = TOMLDecoder;
+		};
 		115AA5C12DA546D500C17E18 /* SymbolPicker */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 115AA5C02DA5463700C17E18 /* XCRemoteSwiftPackageReference "SymbolPicker" */;
