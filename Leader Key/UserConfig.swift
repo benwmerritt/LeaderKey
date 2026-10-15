@@ -5,6 +5,29 @@ import Defaults
 
 let emptyRoot = Group(key: "🚫", label: "Config error", actions: [])
 
+/// The file a config lives in. A `config.toml` takes the place of `config.json` while it
+/// exists, and is edited by hand: Leader Key only ever writes `config.json`.
+enum ConfigFormat {
+  case json
+  case toml
+
+  var fileName: String {
+    switch self {
+    case .json: return "config.json"
+    case .toml: return "config.toml"
+    }
+  }
+
+  var isEditable: Bool { self == .json }
+
+  func decode(_ text: String) throws -> Group {
+    switch self {
+    case .json: return try JSONDecoder().decode(Group.self, from: Data(text.utf8))
+    case .toml: return try TOMLConfig.decode(text)
+    }
+  }
+}
+
 class UserConfig: ObservableObject {
   @Published var root = emptyRoot {
     didSet {
@@ -16,8 +39,9 @@ class UserConfig: ObservableObject {
   @Published var validationErrors: [ValidationError] = []
   // O(1) lookup for row validation; keys are path strings like "1/0/3"
   @Published var validationErrorsByPath: [String: ValidationErrorType] = [:]
+  /// Which file is live, decided each time the config loads.
+  @Published private(set) var format = ConfigFormat.json
 
-  let fileName = "config.json"
   private let alertHandler: AlertHandler
   private let fileManager: FileManager
   private var lastReadChecksum: String?
@@ -39,6 +63,7 @@ class UserConfig: ObservableObject {
   @discardableResult
   func ensureAndLoad() -> Bool {
     ensureValidConfigDirectory()
+    detectFormat()
     let hadNoConfig = !exists
     ensureConfigFileExists()
     loadConfig()
@@ -47,11 +72,14 @@ class UserConfig: ObservableObject {
 
   func reloadFromFile() {
     Events.send(.willReload)
+    detectFormat()
     loadConfig(suppressAlerts: true)
     Events.send(.didReload)
   }
 
   func saveConfig() {
+    guard format.isEditable else { return }
+
     // Check for file conflicts before saving
     if let lastChecksum = lastReadChecksum, exists {
       let currentChecksum = getCurrentFileChecksum()
@@ -85,7 +113,7 @@ class UserConfig: ObservableObject {
       ]
       let jsonData = try encoder.encode(root)
 
-      try writeFile(data: jsonData)
+      try writeFile(data: jsonData, to: url(for: .json))
 
       // Update checksum after successful write using data directly
       lastReadChecksum = calculateChecksum(jsonData)
@@ -95,6 +123,8 @@ class UserConfig: ObservableObject {
   }
 
   private func saveConfigAsync() {
+    guard format.isEditable else { return }
+
     // Cancel any pending save
     saveWorkItem?.cancel()
 
@@ -157,16 +187,20 @@ class UserConfig: ObservableObject {
   }
 
   private func performSaveWithData(_ jsonData: Data, currentRoot: Group) {
+    // A config.toml may have gone live while this save waited.
+    guard format.isEditable else { return }
+
     // Validation on main queue
     let validationErrors = ConfigValidator.validate(group: currentRoot)
     setValidationErrors(validationErrors)
 
     // Back to background for file write
+    let target = url(for: .json)
     configIOQueue.async { [weak self] in
       guard let self = self else { return }
 
       do {
-        try self.writeFile(data: jsonData)
+        try self.writeFile(data: jsonData, to: target)
 
         DispatchQueue.main.async {
           // Update checksum on main queue using data directly
@@ -217,16 +251,31 @@ class UserConfig: ObservableObject {
 
   // MARK: - File Operations
 
+  /// The live config file.
   var path: String {
-    (Defaults[.configDir] as NSString).appendingPathComponent(fileName)
+    path(for: format)
   }
 
   var url: URL {
-    URL(fileURLWithPath: path)
+    url(for: format)
   }
 
   var exists: Bool {
     fileManager.fileExists(atPath: path)
+  }
+
+  private func path(for format: ConfigFormat) -> String {
+    (Defaults[.configDir] as NSString).appendingPathComponent(format.fileName)
+  }
+
+  private func url(for format: ConfigFormat) -> URL {
+    URL(fileURLWithPath: path(for: format))
+  }
+
+  /// A `config.toml` in the config directory wins over `config.json`.
+  private func detectFormat() {
+    format = fileManager.fileExists(atPath: path(for: .toml)) ? .toml : .json
+    if !format.isEditable { saveWorkItem?.cancel() }
   }
 
   private func ensureConfigFileExists() {
@@ -247,17 +296,17 @@ class UserConfig: ObservableObject {
         userInfo: [NSLocalizedDescriptionKey: "Failed to encode default config"]
       )
     }
-    try writeFile(data: data)
+    try writeFile(data: data, to: url(for: .json))
   }
 
-  private func writeFile(data: Data) throws {
-    let target = try configWriteTarget()
+  private func writeFile(data: Data, to url: URL) throws {
+    let target = try writeTarget(for: url)
     try fileManager.createDirectory(
       at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
     try data.write(to: target, options: .atomic)
   }
 
-  private func configWriteTarget() throws -> URL {
+  private func writeTarget(for url: URL) throws -> URL {
     // Resolve each component explicitly: Foundation leaves dangling links unresolved,
     // and an atomic write to an unresolved link would replace it.
     var components = Array(url.pathComponents.dropFirst())
@@ -352,24 +401,13 @@ class UserConfig: ObservableObject {
       return
     }
 
+    let format = self.format
     configIOQueue.async { [weak self] in
       guard let self = self else { return }
 
       do {
         let configString = try self.readFile()
-
-        guard let jsonData = configString.data(using: .utf8) else {
-          throw NSError(
-            domain: "UserConfig",
-            code: 1,
-            userInfo: [
-              NSLocalizedDescriptionKey: "Failed to encode config file as UTF-8"
-            ]
-          )
-        }
-
-        let decoder = JSONDecoder()
-        let decodedRoot = try decoder.decode(Group.self, from: jsonData)
+        let decodedRoot = try format.decode(configString)
         let checksum = self.calculateChecksum(configString)
         let validationErrors = ConfigValidator.validate(group: decodedRoot)
 
