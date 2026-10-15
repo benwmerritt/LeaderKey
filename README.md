@@ -122,6 +122,8 @@ A URL action can leave parts of its URL to be filled in each time it runs:
 { "key": "g", "type": "url", "label": "Search Google", "value": "https://google.com/search?q={query}" }
 ```
 
+In a [TOML config](#a-toml-config) that is `g = { url = "https://google.com/search?q={query}", label = "Search Google" }`. A named placeholder brings its own double quotes, so put that URL in single quotes: `url = 'https://en.wikipedia.org/wiki/{argument name="Topic"}'`.
+
 | Placeholder | Filled with |
 |---|---|
 | `{clipboard}` | The text on the clipboard, without leading or trailing whitespace. When the clipboard holds no text, Leader Key asks for it instead. |
