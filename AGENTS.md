@@ -6,10 +6,10 @@ This file provides guidance to coding agents when working with code in this repo
 
 ## Build & Test Commands
 
-Builds and tests need macOS with Xcode. Edit on agentmini; build and test on mba13 over SSH. mba13 has the Command Line Tools selected, not Xcode, so the scripts and the gate default `DEVELOPER_DIR` to `/Applications/Xcode.app/Contents/Developer`; set it yourself for any other `xcodebuild` call there. For script smoke tests, rsync the tree into a `mktemp -d` on mba13 and run there.
+Builds and tests need macOS with Xcode. Edit on agentmini; build and test on mba13 over SSH. mba13 has the Command Line Tools selected, not Xcode, so the scripts default `DEVELOPER_DIR` to `/Applications/Xcode.app/Contents/Developer`; set it yourself for any other `xcodebuild` call there. For script smoke tests, rsync the tree into a `mktemp -d` on mba13 and run there.
 
-- Lint and run every test: `~/fleet/bin/agent-gate run`. It runs the commands in `.agent-gate.json` on mba13 against the committed HEAD, so commit first: it refuses a tree with uncommitted or untracked files. Passed when it exits 0 and prints `checks passed`.
-- Run one test, on a Mac: the `xcodebuild test` command in `.agent-gate.json` plus `-only-testing:"Leader KeyTests/UserConfigTests/testInitializesWithDefaults"`
+- Lint and run every test: `bin/check`. From agentmini, run it on mba13 against the committed HEAD with `~/fleet/bin/qa-exec --host mba13 --evidence "$(mktemp -u)" --command bin/check`. qa-exec refuses a tree with uncommitted or untracked files, so commit first. Passed when it exits 0 and prints `checks passed`.
+- Run one test: `bin/check -only-testing:"Leader KeyTests/UserConfigTests/testInitializesWithDefaults"`
 - Release build, ad-hoc signed, left at `build/Leader Key.app`: `bin/build`. Like a release's, its build number is the commit count, which is what Sparkle compares to decide whether a release is newer.
 - Signed release build exactly as CI makes it, left at `build/release/Leader-Key-<version>.zip`: `SIGNING_P12=<path> SIGNING_P12_PASSWORD="$(cat <password file>)" bin/release-build`, reading the password from a file so that no command line carries it. The `.p12` and its password live outside the repository. A change to `bin/release-build`, `bin/release-appcast`, `signing/` or `.github/workflows/release.yml` gets this smoke test on mba13 before it ships.
 - Install a build into `/Applications` (quits, backs up, relaunches): `bin/install [APP]`. To bootstrap a Mac, `scp` the `.app` and the script there and run it over SSH: scp sets no quarantine flag, so Gatekeeper never sees the unnotarised app.

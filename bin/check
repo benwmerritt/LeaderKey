@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Lint and run every test. Needs macOS with Xcode; from agentmini, run it on mba13 through
+# qa-exec as AGENTS.md shows. Arguments go to xcodebuild test, such as
+# -only-testing:"Leader KeyTests/UserConfigTests/testInitializesWithDefaults".
+# Non-interactive: prints "checks passed" on success, exits non-zero on failure.
+#
+# Environment:
+#   DEVELOPER_DIR  honoured; default: /Applications/Xcode.app
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# Works where only the Command Line Tools are selected (mba13) as well as where Xcode is.
+export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+
+derived_data="build/DerivedData"
+
+xcrun swift-format lint --strict --recursive "Leader Key" "Leader KeyTests"
+
+xcodebuild -resolvePackageDependencies \
+  -project "Leader Key.xcodeproj" \
+  -scheme "Leader Key" \
+  -derivedDataPath "$derived_data"
+
+xcodebuild test \
+  -project "Leader Key.xcodeproj" \
+  -scheme "Leader Key" \
+  -destination "platform=macOS" \
+  -testPlan TestPlan \
+  -skipPackagePluginValidation \
+  -skipMacroValidation \
+  -derivedDataPath "$derived_data" \
+  CODE_SIGN_IDENTITY=- \
+  "$@"
+
+echo "checks passed"
