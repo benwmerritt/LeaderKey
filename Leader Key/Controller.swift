@@ -65,6 +65,8 @@ class Controller {
   }
 
   func show() {
+    userState.refreshVisibleRoot()
+
     Events.send(.willActivate)
 
     window.show(on: configuredScreen) {
@@ -136,17 +138,19 @@ class Controller {
     }
   }
 
+  /// Returns false when the key is bound to nothing the panel shows.
+  @discardableResult
   func handleKey(
     _ key: String, withModifiers modifiers: NSEvent.ModifierFlags? = nil, execute: Bool = true
-  ) {
+  ) -> Bool {
     if key == "?" {
       showCheatsheet()
-      return
+      return true
     }
 
     let list =
       (userState.currentGroup != nil)
-      ? userState.currentGroup : userConfig.root
+      ? userState.currentGroup : userState.visibleRoot
 
     let hit = list?.actions.first { item in
       switch item {
@@ -185,7 +189,9 @@ class Controller {
       userState.navigateToGroup(group)
     case .none:
       window.notFound()
+      return false
     }
+    return true
   }
 
   private func isInStickyMode(_ modifierFlags: NSEvent.ModifierFlags) -> Bool {

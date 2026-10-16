@@ -1,6 +1,6 @@
 # About this fork
 
-This is [benwmerritt](https://github.com/benwmerritt)'s personal build of [mikker/LeaderKey](https://github.com/mikker/LeaderKey): the same app and bundle ID, built and signed by this fork's GitHub Actions with a self-signed certificate. Updates come from [this fork's releases](https://github.com/benwmerritt/LeaderKey/releases): the app's Sparkle updater reads their feed, downloads new versions in the background and installs them by relaunching Leader Key while its panel and Settings are closed. Nothing is notarised, so a Mac gets its first copy through `bin/install` (after `bin/build`, or from a release zip) rather than by double-clicking a download. The fork also reads a [TOML config](#a-toml-config). Everything after that section is upstream's README, except [placeholders in URL actions](#placeholders-in-url-actions), which only this fork has.
+This is [benwmerritt](https://github.com/benwmerritt)'s personal build of [mikker/LeaderKey](https://github.com/mikker/LeaderKey): the same app and bundle ID, built and signed by this fork's GitHub Actions with a self-signed certificate. Updates come from [this fork's releases](https://github.com/benwmerritt/LeaderKey/releases): the app's Sparkle updater reads their feed, downloads new versions in the background and installs them by relaunching Leader Key while its panel and Settings are closed. Nothing is notarised, so a Mac gets its first copy through `bin/install` (after `bin/build`, or from a release zip) rather than by double-clicking a download. The fork also reads a [TOML config](#a-toml-config). Everything after that section is upstream's README, except [placeholders in URL actions](#placeholders-in-url-actions) and [why an app is missing from the panel](#why-is-an-app-missing-from-the-panel), which only this fork has.
 
 ## A TOML config
 
@@ -224,6 +224,16 @@ You need to make sure your shell environment is correctly set up for non-interac
 **For zsh** make sure you have your `PATH` variable exported in `~/.zshenv`
 
 **For bash** make sure you have your `PATH` variable exported in `~/.bash_profile`
+
+#### Why is an app missing from the panel?
+
+Its app isn't installed at the path the key opens (an application action in `config.json`, `app =` in `config.toml`), so this Mac's panel leaves the key out. A group whose every key is hidden that way is left out too. One config can then serve several Macs that have different apps.
+
+- A hidden key acts like an unbound one: pressing it shakes the panel. It counts nowhere, not even in a group's item count.
+- Only the path in the config counts. A copy of the app somewhere else doesn't, because pressing the key opens that path.
+- Leader Key checks each time the panel opens, so an app installed while it runs shows up the next time you open the panel.
+- Settings still lists every key, and the config file keeps them all.
+- A `leaderkey://navigate` URL stops at the first key the panel doesn't show, hidden or unbound, so the keys after it never run in the wrong group.
 
 
 ## License

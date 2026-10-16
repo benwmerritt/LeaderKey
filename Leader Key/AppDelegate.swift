@@ -228,21 +228,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NSWindow
     }
   }
 
+  /// A key bound to nothing the panel shows ends the sequence, so the keys after it never land in
+  /// a group they weren't meant for.
   private func processKeys(_ keys: [String], execute: Bool = true) {
-    guard !keys.isEmpty else { return }
+    guard let key = keys.first, controller.handleKey(key, execute: execute), keys.count > 1 else {
+      return
+    }
 
-    controller.handleKey(keys[0], execute: execute)
-
-    if keys.count > 1 {
-      let remainingKeys = Array(keys.dropFirst())
-
-      var delayMs = 100
-      for key in remainingKeys {
-        delay(delayMs) { [weak self] in
-          self?.controller.handleKey(key, execute: execute)
-        }
-        delayMs += 100
-      }
+    delay(100) { [weak self] in
+      self?.processKeys(Array(keys.dropFirst()), execute: execute)
     }
   }
 
