@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# Builds a Leader Key tree on mba13 and drives it the way a user does. See ../SKILL.md.
+#
+#   lk-verify stage [--ref REV]                       build the working tree, or commit REV; prints RUN
+#   lk-verify doctor [RUN]                            read-only state of mba13 and the run
+#   lk-verify begin RUN [--theme cheater|mini] [--config FILE]
+#                                                     take the lock and swap the installed app for RUN
+#   lk-verify set RUN KEY [-TYPE] VALUE               write a Leader Key default, relaunch the build
+#   lk-verify drive RUN STEP...                       keys, leaderkey:// URLs, measurements, screenshots
+#   lk-verify fetch RUN                               copy the evidence so far to .verify/RUN/evidence
+#   lk-verify end RUN                                 restore the installed app and its defaults exactly,
+#                                                     release the lock, fetch the evidence
+#   lk-verify clean RUN                               delete the run on mba13; local evidence stays
+#
+# begin exits 75 when another run holds the lock: wait and retry.
+set -euo pipefail
+
+host="${LK_VERIFY_HOST:-mba13}"
+skill_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo="$(git -C "$skill_dir" rev-parse --show-toplevel)"
+state="$repo/.verify"
+
+fail() {
+  echo "lk-verify: $*" >&2
+  exit 1
+}
+
+# Runs scripts/remote.sh on mba13 against the run directory $1.
+remote() {
+  local dir="$1"
+  shift
+  ssh "$host" "LK_SETTLE=${LK_SETTLE:-1} bash -s $(printf '%q ' "$dir" "$@")" \
+    <"$skill_dir/scripts/remote.sh"
+}
+
+run_dir() {
+  [[ -n ${1:-} ]] || fail "which run? (the id stage printed; runs are listed in $state)"
+  local env="$state/$1/run.env"
+  [[ -f $env ]] || fail "no run $1 in $state"
+  sed -n 's/^dir=//p' "$env"
+}
+
+fetch() {
+  mkdir -p "$state/$1"
+  ssh "$host" "tar -C '$2' -cf - evidence" | tar -x -C "$state/$1"
+  echo "evidence: $state/$1/evidence"
+}
+
+stage() {
+  local ref="" sha build source
+  if (($# == 2)) && [[ $1 == --ref ]]; then
+    ref="$2"
+    sha="$(git -C "$repo" rev-parse --verify "$ref^{commit}")"
+    source="$ref ($(git -C "$repo" rev-parse --short "$sha"))"
+  elif (($# == 0)); then
+    sha="$(git -C "$repo" rev-parse HEAD)"
+    source="working tree on $(git -C "$repo" rev-parse --short HEAD)"
+  else
+    fail "stage takes no arguments, or --ref REV"
+  fi
+  # Releases number builds by commit count; copy that, since the tree goes over without .git.
+  build="$(git -C "$repo" rev-list --count "$sha")"
+  local run
+  run="$(date -u +%m%d-%H%M%S)-$(git -C "$repo" rev-parse --short "$sha")"
+  local dir="/private/tmp/lk-verify-$run"
+
+  # mkdir without -p claims the run, so two stages in the same second never share a directory.
+  ssh "$host" "mkdir '$dir' && mkdir '$dir/src' '$dir/evidence'" ||
+    fail "$dir already exists on $host; stage again"
+  if [[ -n $ref ]]; then
+    git -C "$repo" archive --format=tar "$sha" | ssh "$host" "tar -x -C '$dir/src'"
+  else
+    (
+      cd "$repo"
+      git ls-files -z --cached --others --exclude-standard |
+        while IFS= read -r -d '' file; do
+          [[ -e $file || -L $file ]] && printf '%s\0' "$file"
+        done |
+        tar -c -f - --null -T -
+    ) | ssh "$host" "tar -x -C '$dir/src'"
+  fi
+  scp -q "$skill_dir/scripts/measure-panel.swift" "$skill_dir/fixtures/config.json" "$host:$dir/"
+
+  echo "building $source on $host in $dir (a few minutes)" >&2
+  if ! ssh "$host" "cd '$dir/src' && BUILD_NUMBER=$build bin/build >'$dir/build.log' 2>&1"; then
+    ssh "$host" "tail -40 '$dir/build.log'" >&2
+    fail "build failed; full log at $host:$dir/build.log"
+  fi
+  ssh "$host" "cd '$dir' && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+    xcrun swiftc -O measure-panel.swift -o measure-panel" >&2
+
+  mkdir -p "$state/$run"
+  printf 'dir=%s\nsource=%s\nbuild=%s\n' "$dir" "$source" "$build" >"$state/$run/run.env"
+  echo "$run"
+}
+
+[[ $# -gt 0 ]] || {
+  sed -n '4,15s/^# \{0,1\}//p' "${BASH_SOURCE[0]}" >&2
+  exit 1
+}
+command="$1"
+shift
+
+case "$command" in
+stage) stage "$@" ;;
+doctor)
+  if [[ -n ${1:-} ]]; then
+    dir="$(run_dir "$1")"
+    cat "$state/$1/run.env"
+  else
+    dir=/private/tmp/lk-verify-none
+  fi
+  remote "$dir" doctor
+  ;;
+begin)
+  run="${1:-}"
+  dir="$(run_dir "$run")"
+  shift
+  theme=cheater
+  config="$dir/config.json"
+  while (($#)); do
+    case "$1" in
+    --theme) theme="${2:?--theme needs cheater or mini}" ;;
+    --config)
+      [[ -f ${2:-} ]] || fail "no config file at ${2:-}"
+      [[ $2 == *.json || $2 == *.toml ]] || fail "--config takes a .json or .toml file"
+      config="$dir/begin-config.${2##*.}"
+      scp -q "$2" "$host:$config"
+      ;;
+    *) fail "unknown begin option: $1" ;;
+    esac
+    shift 2
+  done
+  [[ $theme == cheater || $theme == mini ]] || fail "--theme takes cheater or mini, not $theme"
+  status=0
+  remote "$dir" begin "$theme" "$config" || status=$?
+  if ((status == 75)); then
+    echo "lk-verify: another run holds the lock (see above); wait and retry begin" >&2
+  fi
+  exit $status
+  ;;
+set | drive)
+  dir="$(run_dir "${1:-}")"
+  shift
+  remote "$dir" "$command" "$@"
+  ;;
+fetch)
+  fetch "${1:-}" "$(run_dir "${1:-}")"
+  ;;
+end)
+  dir="$(run_dir "${1:-}")"
+  status=0
+  remote "$dir" end || status=$?
+  fetch "$1" "$dir"
+  exit $status
+  ;;
+clean)
+  remote "$(run_dir "${1:-}")" clean
+  echo "local evidence stays in $state/$1"
+  ;;
+*) fail "unknown command: $command" ;;
+esac
