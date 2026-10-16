@@ -75,7 +75,8 @@ lock_ours() { grep -q -F -- "$run_id" "$lock/owner" 2>/dev/null; }
 need_lock() { lock_ours || fail "this run does not hold $lock; run begin first"; }
 
 need_build_running() {
-  running "$app" || fail "this run's build is not running"
+  running "$app" || fail "this run's build is not running; a crash report would be in" \
+    "$HOME/Library/Logs/DiagnosticReports on $(hostname -s)"
   ! running "$installed" || fail "the installed Leader Key is running beside the build; quit it first"
 }
 
@@ -231,20 +232,22 @@ begin() {
     exit 75
   fi
   echo "$run_id $(date -u +%FT%TZ)" >"$lock/owner"
-  trap 'echo "begin failed; restoring" >&2; restore; exit 1' ERR
   local others
   others="$(strays)"
   if [[ -n $others ]]; then
     printf 'another Leader Key copy is running; quit it or ask its owner:\n%s\n' "$others" >&2
-    false
+    rm -rf "$lock"
+    exit 1
   fi
+  # Record what restore puts back before anything can fail into it.
   mkdir -p "$evidence" "$run_dir/config"
   if running "$installed"; then
     echo yes >"$run_dir/installed-was-running"
-    stop "$installed"
   else
     echo no >"$run_dir/installed-was-running"
   fi
+  trap 'echo "begin failed; restoring" >&2; restore; exit 1' ERR
+  stop "$installed"
   if defaults export "$domain" "$run_dir/defaults-before.plist" 2>/dev/null; then :; else
     rm -f "$run_dir/defaults-before.plist"
     touch "$run_dir/defaults-absent"
@@ -309,9 +312,10 @@ shot() {
 
 drive() {
   need_lock
-  need_build_running
   local step
   while (($#)); do
+    # Checked before every step, so a crash fails the drive instead of a URL relaunching the build.
+    need_build_running
     step="$1"
     shift
     case "$step" in
@@ -352,6 +356,7 @@ drive() {
     esac || fail "$step failed"
     log_step "$step"
   done
+  need_build_running
 }
 
 clean() {
