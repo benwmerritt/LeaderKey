@@ -127,9 +127,12 @@ begin)
     esac
     shift 2
   done
+  [[ $theme == cheater || $theme == mini ]] || fail "--theme takes cheater or mini, not $theme"
   status=0
   remote "$dir" begin "$theme" "$config" || status=$?
-  ((status == 75)) && fail "another run holds the lock (see above); wait and retry begin"
+  if ((status == 75)); then
+    echo "lk-verify: another run holds the lock (see above); wait and retry begin" >&2
+  fi
   exit $status
   ;;
 set | drive)

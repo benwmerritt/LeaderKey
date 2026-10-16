@@ -22,8 +22,7 @@ With the Mini theme, Leader Key opens a small square in the bottom-right corner 
 
 Preconditions:
 
-- Baseline from `README.md`, begun with `--theme mini`.
-- `autoOpenCheatsheet` and `cheatsheetDelayMS` at their defaults (`delay`, 2000) unless a step sets them.
+- Baseline from `README.md`, begun with `--theme mini`, so the cheatsheet opens after the default 2000 ms delay.
 
 - **Open.** Press the shortcut. Run `drive "$RUN" shortcut measure square`. One 36.0x36.0 window with `right` 8 less than `visible right` and `bottom` 8 more than `visible bottom` (1432.0 and 8.0 on mba13).
 - **Delayed cheatsheet.** Wait out the delay. Run `drive "$RUN" wait 2 measure delayed shot delayed`. Two windows: the square, and the cheatsheet with the same `right` and a `bottom` 8 above the square's `top` (52.0 on mba13). The shots show the root list and a dot in the square.

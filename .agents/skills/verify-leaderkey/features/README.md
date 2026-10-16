@@ -5,7 +5,7 @@ This directory is the maintained source for verifying what a Leader Key user see
 ## Baseline preconditions
 
 - `lk-verify stage` built the tree under test and printed `$RUN`.
-- `lk-verify begin "$RUN"` printed `running <version> (<build>) with theme <theme>`, with the theme the feature file names and `fixtures/config.json` unless the file says otherwise.
+- `lk-verify begin "$RUN"` printed `running <version> (<build>) with theme <theme>`, with the theme the feature file names and `fixtures/config.json` unless the file says otherwise. Every other setting is at the app's default; the activation shortcut is mba13's own.
 - `lk-verify doctor "$RUN"` shows the lock held by `$RUN`, the build running and no other Leader Key copy.
 - The panel is closed, at the root of the config.
 

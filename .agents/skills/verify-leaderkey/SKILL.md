@@ -19,7 +19,7 @@ Ground rules:
 ## Launch
 
 1. Stage a build. `RUN=$(lk-verify stage)` copies the working tree, uncommitted and untracked files included, to mba13 and builds it; `lk-verify stage --ref origin/main` builds a commit instead, for the before half of a before and after pair. A build takes a few minutes. stdout is the run id; the build log stays at `mba13:/private/tmp/lk-verify-$RUN/build.log`.
-2. `lk-verify begin "$RUN" [--theme cheater|mini] [--config FILE]`. Cheater is the default theme and `fixtures/config.json` the default config. A `--config` file ending `.toml` lands as `config.toml`, so the build reads TOML. begin takes the lock, quits the installed app, snapshots Leader Key's defaults, points `configDir` at a copy of the config, turns off Sparkle's checks and launches the build. Ready when it prints `running <version> (<build>) with theme <theme>`; by then it has opened and closed the panel once, so the build answers. Exit status 75 means another run holds the lock: the message names the owner, so wait a minute and retry. Any other failure restores mba13 before begin exits.
+2. `lk-verify begin "$RUN" [--theme cheater|mini] [--config FILE]`. Cheater is the default theme and `fixtures/config.json` the default config. A `--config` file ending `.toml` lands as `config.toml`, so the build reads TOML. begin takes the lock, quits the installed app, snapshots Leader Key's defaults, resets them to the app's own defaults apart from the activation shortcut, points `configDir` at a copy of the config, turns off Sparkle's checks and launches the build. Ready when it prints `running <version> (<build>) with theme <theme>`; by then it has opened and closed the panel once, so the build answers. Exit status 75 means another run holds the lock: the message names the owner, so wait a minute and retry. Any other failure restores mba13 before begin exits.
 3. Optional. `lk-verify set "$RUN" KEY [-TYPE] VALUE` writes one more Leader Key default and relaunches the build, as in `set "$RUN" autoOpenCheatsheet always` or `set "$RUN" showAppIconsInCheatsheet -bool true`. The keys are in `Leader Key/Defaults.swift`. begin's snapshot covers them, so `end` undoes them too.
 
 The fixture config gives every feature recipe something to press:
@@ -54,7 +54,7 @@ The fixture config gives every feature recipe something to press:
 | `screen NAME` | screenshots the whole screen |
 | `shortcut` | presses the activation shortcut recorded in Settings (F14 on mba13), the way a user opens the panel |
 | `marker` | whether the "Mark the run" command has run |
-| `running APP` / `quit APP` | whether a process named APP runs, or asks APP to quit |
+| `running APP` / `quit APP` | whether a process named APP runs, or asks a running APP to quit (and fails when it is not running) |
 
 Key steps refuse to type unless a Leader Key window is on screen. Leader Key hides its panel the moment it loses focus, so a window on screen is what proves the keys reach Leader Key and no other app on mba13. `shortcut` skips the guard, since opening the panel is its job.
 
@@ -76,7 +76,7 @@ Each run's evidence directory holds `steps.log` (every step with its UTC time), 
 2. `lk-verify end "$RUN"`, after a failed drive as much as a good one. It quits the build, clears Leader Key's defaults and imports the snapshot, relaunches the installed app if it had been running, releases the lock, and fetches the evidence. Done when it prints `Leader Key defaults restored exactly`, `installed app relaunched: <version>` (when it had been running) and `lock released`.
 3. `lk-verify clean "$RUN"` unregisters the build from LaunchServices and deletes the run on mba13. The evidence in `.verify/$RUN/` stays.
 
-When `end` cannot finish, run doctor and repair by hand on mba13: `defaults delete com.brnbw.Leader-Key && defaults import com.brnbw.Leader-Key /private/tmp/lk-verify-$RUN/defaults-before.plist`, then `open -a "/Applications/Leader Key.app"`, then `rm -rf /tmp/leaderkey-smoke.lock` once its owner file names this run.
+When `end` cannot finish, it says what failed and keeps the lock, so no other smoke test starts on a half-restored Mac. Run doctor and repair by hand on mba13: `defaults delete com.brnbw.Leader-Key && defaults import com.brnbw.Leader-Key /private/tmp/lk-verify-$RUN/defaults-before.plist`, then `open -a "/Applications/Leader Key.app"`, then `rm -rf /tmp/leaderkey-smoke.lock` once its owner file names this run.
 
 ## Helpers
 
@@ -90,5 +90,5 @@ When `end` cannot finish, run doctor and repair by hand on mba13: `defaults dele
 - `shot` and `screen` need Screen Recording for SSH sessions on mba13, which macOS grants only in System Settings > Privacy & Security > Screen & System Audio Recording, to `/usr/libexec/sshd-keygen-wrapper`. Without it they stop the drive with that message. Leave them out and cite the `measure` lines instead.
 - A `leaderkey://` URL that reaches Leader Key while it is still launching, or that launches it, crashes it, and each later URL relaunches it into the same crash. begin and `set` wait until the build has made its windows; send URLs only to a running build.
 - On mba13, System Events and `lsappinfo` report a ghost 1Password as the frontmost app, so a frontmost-app check says nothing. The window-on-screen guard is the check.
-- A plain `open leaderkey://...` goes to whichever copy LaunchServices picks, often the installed app. The URL steps pass this run's build to `open -a`; use them.
+- A plain `open leaderkey://...` goes to whichever copy LaunchServices picks, often the installed app, and launches it when it is not running. The URL steps pass this run's build to `open -a`; use them. `drive` refuses to run while the installed copy runs beside the build.
 - `navigate` runs the action it lands on. Add `&execute=false` through the `url` step to stop at the action instead.

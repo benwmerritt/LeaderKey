@@ -74,7 +74,10 @@ lock_ours() { grep -q -F -- "$run_id" "$lock/owner" 2>/dev/null; }
 
 need_lock() { lock_ours || fail "this run does not hold $lock; run begin first"; }
 
-need_build_running() { running "$app" || fail "this run's build is not running"; }
+need_build_running() {
+  running "$app" || fail "this run's build is not running"
+  ! running "$installed" || fail "the installed Leader Key is running beside the build; quit it first"
+}
 
 log_step() { printf '%s %s\n' "$(date -u +%T)" "$*" >>"$evidence/steps.log"; }
 
@@ -88,6 +91,7 @@ wait_ready() {
   for tries in {1..20}; do
     running "$app" || return 1
     [[ -n $("$run_dir/measure-panel" --made) ]] && break
+    ((tries == 20)) && return 1
     sleep 0.5
   done
   sleep 1
@@ -167,7 +171,8 @@ doctor() {
 }
 
 # Undo begin, as far as it got: quit the build, put the defaults back exactly, relaunch the
-# installed app if it was running, release the lock. Safe to run again.
+# installed app if it was running, release the lock. Safe to run again. When any of it fails the
+# lock stays held, so no other smoke test starts on a Mac that still needs repair.
 restore() {
   local status=0
   stop "$app" || {
@@ -202,8 +207,12 @@ restore() {
     fi
   fi
   if lock_ours; then
-    rm -rf "$lock"
-    echo "lock released"
+    if ((status == 0)); then
+      rm -rf "$lock"
+      echo "lock released"
+    else
+      echo "lock kept for repair; release it with rm -rf $lock once mba13 is restored" >&2
+    fi
   fi
   return $status
 }
@@ -235,9 +244,15 @@ begin() {
     rm -f "$run_dir/defaults-before.plist"
     touch "$run_dir/defaults-absent"
   fi
-  rm -f "$marker"
+  rm -f "$marker" "$run_dir"/config/config.{json,toml}
   local config_file="$run_dir/config/config.${config##*.}"
   cp "$config" "$config_file"
+  # Run on the app's own defaults, so recipes see the same settings whatever mba13's user chose,
+  # keeping only the activation shortcut that the shortcut step presses.
+  local shortcut
+  shortcut="$(defaults read "$domain" KeyboardShortcuts_navigate 2>/dev/null)" || shortcut=""
+  defaults delete "$domain" 2>/dev/null || :
+  [[ -z $shortcut ]] || defaults write "$domain" KeyboardShortcuts_navigate -string "$shortcut"
   defaults write "$domain" theme "$theme"
   defaults write "$domain" configDir "$run_dir/config"
   # Keep Sparkle from checking, or installing a release over this build, while it runs.
@@ -263,10 +278,7 @@ set_default() {
   echo "set $1 and relaunched the build"
 }
 
-open_url() {
-  open -g -a "$app" "$1"
-  sleep "$settle"
-}
+open_url() { open -g -a "$app" "$1" && sleep "$settle"; }
 
 # screencapture needs Screen Recording for SSH sessions on this Mac; without it, it fails.
 capture() {
@@ -306,24 +318,19 @@ drive() {
       case "$step" in
       navigate) open_url "leaderkey://navigate?keys=$1" ;;
       url) open_url "$1" ;;
-      key)
-        system_events "keystroke $(quoted "$1")"
-        sleep "$settle"
-        ;;
-      sticky)
-        system_events "keystroke $(quoted "$1") using $(sticky_modifier) down"
-        sleep "$settle"
-        ;;
+      key) system_events "keystroke $(quoted "$1")" && sleep "$settle" ;;
+      sticky) system_events "keystroke $(quoted "$1") using $(sticky_modifier) down" && sleep "$settle" ;;
       running)
         if pgrep -u "$uid" -xq "$1"; then echo "$1: running"; else echo "$1: not running"; fi |
           tee -a "$evidence/measure.log"
         ;;
-      quit) osascript -e "tell application $(quoted "$1") to quit" >/dev/null ;;
+      # osascript reports success even for an app that does not exist, so check it runs first.
+      quit) pgrep -u "$uid" -xq "$1" && osascript -e "tell application $(quoted "$1") to quit" >/dev/null ;;
       wait) sleep "$1" ;;
       measure) "$run_dir/measure-panel" "$1" | tee -a "$evidence/measure.log" ;;
       shot) shot "$1" ;;
       screen) capture "$evidence/$1.png" -m ;;
-      esac
+      esac || fail "$step $1 failed"
       log_step "$step $1"
       shift
       continue
@@ -337,7 +344,7 @@ drive() {
     escape) system_events 'key code 53' && sleep "$settle" ;;
     return) system_events 'key code 36' && sleep "$settle" ;;
     *) fail "unknown step: $step" ;;
-    esac
+    esac || fail "$step failed"
     log_step "$step"
   done
 }
