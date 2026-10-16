@@ -51,10 +51,11 @@ stop() {
 }
 
 # Right after a quit, LaunchServices can refuse to open an app with error -600; retry once.
+# Arguments after the app, such as a URL, go to open with it.
 launch() {
-  open -a "$1" 2>/dev/null || {
+  open -a "$@" 2>/dev/null || {
     sleep 4
-    open -a "$1"
+    open -a "$@"
   }
   wait_until running "$1" 20
 }
@@ -84,9 +85,9 @@ log_step() { printf '%s %s\n' "$(date -u +%T)" "$*" >>"$evidence/steps.log"; }
 
 panel_on_screen() { [[ -n $("$run_dir/measure-panel" --ids) ]]; }
 
-# A leaderkey:// URL that reaches Leader Key before it finishes launching crashes it, and every
-# later URL relaunches it into the same crash. Ready means it has made its windows, then opened
-# its panel on request and closed it again.
+# Builds older than the launch fix crash on a leaderkey:// URL that reaches them before they have
+# finished launching, and every later URL relaunches them into the same crash. Ready means it has
+# made its windows, then opened its panel on request and closed it again.
 wait_ready() {
   local tries
   for tries in {1..20}; do
@@ -323,11 +324,12 @@ drive() {
     show | hide | reset | activate | settings | config-reload | about)
       open_url "leaderkey://$step"
       ;;
-    navigate | url | key | sticky | running | quit | wait | measure | shot | screen)
+    navigate | url | cold | key | sticky | running | quit | wait | measure | shot | screen)
       (($#)) || fail "$step needs an argument"
       case "$step" in
       navigate) open_url "leaderkey://navigate?keys=$1" ;;
       url) open_url "$1" ;;
+      cold) stop "$app" && launch "$app" "$1" && sleep 2 && sleep "$settle" ;;
       key) system_events "keystroke $(quoted "$1")" && sleep "$settle" ;;
       sticky) system_events "keystroke $(quoted "$1") using $(sticky_modifier) down" && sleep "$settle" ;;
       running)

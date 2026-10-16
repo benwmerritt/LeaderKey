@@ -51,6 +51,9 @@ class UserConfig: ObservableObject {
   private var saveWorkItem: DispatchWorkItem?
   /// Counts loads, so a load that a newer one has overtaken doesn't apply its result.
   private var loadGeneration = 0
+  /// Completions of loads that have not applied yet. An overtaken load leaves its completion
+  /// here for the load that overtook it.
+  private var loadCompletions: [() -> Void] = []
 
   init(
     alertHandler: AlertHandler = DefaultAlertHandler(),
@@ -62,14 +65,15 @@ class UserConfig: ObservableObject {
 
   // MARK: - Public Interface
 
-  /// Returns whether there was no config file, as on a Mac's first launch.
+  /// Returns whether there was no config file, as on a Mac's first launch. `completion` runs on
+  /// the main queue once the config is in `root`, or has failed to load.
   @discardableResult
-  func ensureAndLoad() -> Bool {
+  func ensureAndLoad(completion: @escaping () -> Void = {}) -> Bool {
     ensureValidConfigDirectory()
     detectFormat()
     let hadNoConfig = !exists
     ensureConfigFileExists()
-    loadConfig()
+    loadConfig(completion: completion)
     return hadNoConfig
   }
 
@@ -458,15 +462,20 @@ class UserConfig: ObservableObject {
 
   // MARK: - Config Loading
 
-  private func loadConfig(suppressAlerts: Bool = false) {
+  private func loadConfig(suppressAlerts: Bool = false, completion: @escaping () -> Void = {}) {
     isLoading = true
     loadGeneration += 1
     let generation = loadGeneration
+    loadCompletions.append(completion)
 
     guard exists else {
       root = emptyRoot
       validationErrors = []
       isLoading = false
+      DispatchQueue.main.async {
+        guard generation == self.loadGeneration else { return }
+        self.runLoadCompletions()
+      }
       return
     }
 
@@ -486,15 +495,24 @@ class UserConfig: ObservableObject {
           if format == .json { self.lastReadChecksum = checksum }
           self.setValidationErrors(validationErrors)
           self.isLoading = false
-
+          self.runLoadCompletions()
         }
       } catch {
         DispatchQueue.main.async {
           guard generation == self.loadGeneration else { return }
           self.handleError(error, critical: false)
           self.isLoading = false
+          self.runLoadCompletions()
         }
       }
+    }
+  }
+
+  private func runLoadCompletions() {
+    let completions = loadCompletions
+    loadCompletions = []
+    for completion in completions {
+      completion()
     }
   }
 

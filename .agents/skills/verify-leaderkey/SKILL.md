@@ -45,6 +45,7 @@ The fixture config gives every feature recipe something to press:
 | `show` `hide` `reset` `activate` `settings` `about` `config-reload` | opens `leaderkey://<step>` with this run's build |
 | `navigate KEYS` | `leaderkey://navigate?keys=KEYS`, comma separated, which runs the action it lands on |
 | `url URL` | opens any URL with this run's build, such as `leaderkey://navigate?keys=o,u&execute=false` |
+| `cold URL` | quits the build and opens URL with it, the way a link reaches Leader Key when it is not running |
 | `key TEXT` | types TEXT |
 | `sticky TEXT` | types TEXT holding the sticky-mode modifier, Option unless Settings chose Control |
 | `backspace` `escape` `return` | presses that key |
@@ -88,7 +89,7 @@ When `end` cannot finish, it says what failed and keeps the lock, so no other sm
 ## Gotchas
 
 - `shot` and `screen` need Screen Recording for SSH sessions on mba13, which macOS grants only in System Settings > Privacy & Security > Screen & System Audio Recording, to `/usr/libexec/sshd-keygen-wrapper`. Without it they stop the drive with that message. Leave them out and cite the `measure` lines instead.
-- A `leaderkey://` URL that reaches Leader Key while it is still launching, or that launches it, crashes it, and each later URL relaunches it into the same crash. begin and `set` wait until the build has made its windows; send URLs only to a running build.
+- Builds older than the launch fix crash when a `leaderkey://` URL launches them or reaches them mid-launch, and each later URL relaunches them into the same crash. begin and `set` wait until the build has made its windows, so only `cold` meets the crash, and on such a build it stops the drive with "this run's build is not running".
 - On mba13, System Events and `lsappinfo` report a ghost 1Password as the frontmost app, so a frontmost-app check says nothing. The window-on-screen guard is the check.
 - A plain `open leaderkey://...` goes to whichever copy LaunchServices picks, often the installed app, and launches it when it is not running. The URL steps pass this run's build to `open -a`; use them. `drive` refuses to run while the installed copy runs beside the build.
 - `navigate` runs the action it lands on. Add `&execute=false` through the `url` step to stop at the action instead.
