@@ -62,14 +62,15 @@ class UserConfig: ObservableObject {
 
   // MARK: - Public Interface
 
-  /// Returns whether there was no config file, as on a Mac's first launch.
+  /// Returns whether there was no config file, as on a Mac's first launch. `completion` runs on
+  /// the main queue once the config is in `root`, or has failed to load.
   @discardableResult
-  func ensureAndLoad() -> Bool {
+  func ensureAndLoad(completion: @escaping () -> Void = {}) -> Bool {
     ensureValidConfigDirectory()
     detectFormat()
     let hadNoConfig = !exists
     ensureConfigFileExists()
-    loadConfig()
+    loadConfig(completion: completion)
     return hadNoConfig
   }
 
@@ -458,7 +459,7 @@ class UserConfig: ObservableObject {
 
   // MARK: - Config Loading
 
-  private func loadConfig(suppressAlerts: Bool = false) {
+  private func loadConfig(suppressAlerts: Bool = false, completion: @escaping () -> Void = {}) {
     isLoading = true
     loadGeneration += 1
     let generation = loadGeneration
@@ -467,6 +468,7 @@ class UserConfig: ObservableObject {
       root = emptyRoot
       validationErrors = []
       isLoading = false
+      DispatchQueue.main.async(execute: completion)
       return
     }
 
@@ -481,6 +483,7 @@ class UserConfig: ObservableObject {
         let validationErrors = ConfigValidator.validate(group: decodedRoot)
 
         DispatchQueue.main.async {
+          defer { completion() }
           guard generation == self.loadGeneration else { return }
           self.root = decodedRoot
           if format == .json { self.lastReadChecksum = checksum }
@@ -490,6 +493,7 @@ class UserConfig: ObservableObject {
         }
       } catch {
         DispatchQueue.main.async {
+          defer { completion() }
           guard generation == self.loadGeneration else { return }
           self.handleError(error, critical: false)
           self.isLoading = false

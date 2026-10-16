@@ -19,6 +19,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NSWindow
   private var pendingUpdateInstall: (() -> Void)?
   private var panelHiddenObserver: AnyCancellable?
   private var isSettingsOpen = false
+  /// URLs wait here until Leader Key has made its panel and loaded its config, the URL that
+  /// launched it among them, since AppKit hands that over before applicationDidFinishLaunching.
+  /// Nil once they have been handled.
+  private var urlsBeforeReady: [URL]? = []
 
   lazy var settingsWindowController = SettingsWindowController(
     panes: [
@@ -54,7 +58,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NSWindow
 
     NSApp.mainMenu = MainMenu()
 
-    let hadNoConfig = config.ensureAndLoad()
+    let hadNoConfig = config.ensureAndLoad { self.handleURLsBeforeReady() }
     state = UserState(userConfig: config)
     controller = Controller(userState: state, userConfig: config)
 
@@ -195,9 +199,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NSWindow
   // MARK: - URL Scheme Handling
 
   func application(_ application: NSApplication, open urls: [URL]) {
-    for url in urls {
-      handleURL(url)
+    guard urlsBeforeReady == nil else {
+      urlsBeforeReady?.append(contentsOf: urls)
+      return
     }
+    urls.forEach(handleURL)
+  }
+
+  private func handleURLsBeforeReady() {
+    let urls = urlsBeforeReady ?? []
+    urlsBeforeReady = nil
+    urls.forEach(handleURL)
   }
 
   private func handleURL(_ url: URL) {

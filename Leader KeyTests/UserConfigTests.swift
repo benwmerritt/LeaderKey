@@ -159,6 +159,31 @@ final class UserConfigTests: XCTestCase {
     XCTAssertEqual(testAlertManager.shownAlerts.count, 0)
   }
 
+  // MARK: - Load completion
+
+  func testLoadCompletionRunsWithTheConfigInRoot() throws {
+    let json = """
+      { "actions": [ { "key": "a", "type": "url", "value": "https://example.com" } ] }
+      """
+    try json.write(to: subject.url, atomically: true, encoding: .utf8)
+
+    var actionsWhenLoaded: Int?
+    subject.ensureAndLoad { actionsWhenLoaded = self.subject.root.actions.count }
+    waitUntil("the load completion") { actionsWhenLoaded != nil }
+
+    XCTAssertEqual(actionsWhenLoaded, 1)
+  }
+
+  func testLoadCompletionRunsWhenTheConfigFailsToParse() throws {
+    try "{ invalid json }".write(to: subject.url, atomically: true, encoding: .utf8)
+
+    var alertsWhenLoaded: Int?
+    subject.ensureAndLoad { alertsWhenLoaded = self.testAlertManager.shownAlerts.count }
+    waitUntil("the load completion") { alertsWhenLoaded != nil }
+
+    XCTAssertEqual(alertsWhenLoaded, 1)
+  }
+
   // MARK: - Symlinked config
 
   func testSavingThroughSymlinkKeepsLinkAndUpdatesTarget() throws {

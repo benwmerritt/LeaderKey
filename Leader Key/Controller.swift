@@ -32,8 +32,9 @@ class Controller {
     self.userState = userState
     self.userConfig = userConfig
 
+    self.window = Theme.classFor(Defaults[.theme]).init(controller: self)
     Task {
-      for await value in Defaults.updates(.theme) {
+      for await value in Defaults.updates(.theme, initial: false) {
         let windowClass = Theme.classFor(value)
         self.window = await windowClass.init(controller: self)
       }
