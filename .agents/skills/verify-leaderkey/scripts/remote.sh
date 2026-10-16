@@ -241,6 +241,7 @@ begin() {
   fi
   # Record what restore puts back before anything can fail into it.
   mkdir -p "$evidence" "$run_dir/config"
+  rm -f "$run_dir/defaults-before.plist" "$run_dir/defaults-absent"
   if running "$installed"; then
     echo yes >"$run_dir/installed-was-running"
   else
