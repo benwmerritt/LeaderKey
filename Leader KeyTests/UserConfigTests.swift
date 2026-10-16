@@ -184,6 +184,27 @@ final class UserConfigTests: XCTestCase {
     XCTAssertEqual(alertsWhenLoaded, 1)
   }
 
+  func testLoadCompletionWaitsForALoadThatOvertakesIt() throws {
+    let oneAction = """
+      { "actions": [ { "key": "a", "type": "url", "value": "https://example.com" } ] }
+      """
+    let twoActions = """
+      { "actions": [
+        { "key": "a", "type": "url", "value": "https://example.com" },
+        { "key": "b", "type": "url", "value": "https://example.org" }
+      ] }
+      """
+    try oneAction.write(to: subject.url, atomically: true, encoding: .utf8)
+
+    var actionsWhenLoaded: Int?
+    subject.ensureAndLoad { actionsWhenLoaded = self.subject.root.actions.count }
+    try twoActions.write(to: subject.url, atomically: true, encoding: .utf8)
+    subject.reloadFromFile()
+    waitUntil("the load completion") { actionsWhenLoaded != nil }
+
+    XCTAssertEqual(actionsWhenLoaded, 2)
+  }
+
   // MARK: - Symlinked config
 
   func testSavingThroughSymlinkKeepsLinkAndUpdatesTarget() throws {

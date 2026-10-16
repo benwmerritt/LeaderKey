@@ -51,6 +51,9 @@ class UserConfig: ObservableObject {
   private var saveWorkItem: DispatchWorkItem?
   /// Counts loads, so a load that a newer one has overtaken doesn't apply its result.
   private var loadGeneration = 0
+  /// Completions of loads that have not applied yet. An overtaken load leaves its completion
+  /// here for the load that overtook it.
+  private var loadCompletions: [() -> Void] = []
 
   init(
     alertHandler: AlertHandler = DefaultAlertHandler(),
@@ -463,12 +466,16 @@ class UserConfig: ObservableObject {
     isLoading = true
     loadGeneration += 1
     let generation = loadGeneration
+    loadCompletions.append(completion)
 
     guard exists else {
       root = emptyRoot
       validationErrors = []
       isLoading = false
-      DispatchQueue.main.async(execute: completion)
+      DispatchQueue.main.async {
+        guard generation == self.loadGeneration else { return }
+        self.runLoadCompletions()
+      }
       return
     }
 
@@ -483,22 +490,29 @@ class UserConfig: ObservableObject {
         let validationErrors = ConfigValidator.validate(group: decodedRoot)
 
         DispatchQueue.main.async {
-          defer { completion() }
           guard generation == self.loadGeneration else { return }
           self.root = decodedRoot
           if format == .json { self.lastReadChecksum = checksum }
           self.setValidationErrors(validationErrors)
           self.isLoading = false
-
+          self.runLoadCompletions()
         }
       } catch {
         DispatchQueue.main.async {
-          defer { completion() }
           guard generation == self.loadGeneration else { return }
           self.handleError(error, critical: false)
           self.isLoading = false
+          self.runLoadCompletions()
         }
       }
+    }
+  }
+
+  private func runLoadCompletions() {
+    let completions = loadCompletions
+    loadCompletions = []
+    for completion in completions {
+      completion()
     }
   }
 
