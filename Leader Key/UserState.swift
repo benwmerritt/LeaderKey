@@ -37,25 +37,29 @@ final class UserState: ObservableObject {
     navigationPath.append(group)
   }
 
-  /// `Controller.show()` calls this, so an app installed or removed while Leader Key runs shows
-  /// or hides the next time the panel opens.
+  /// `Controller.show()` calls this, so an app or folder added or removed while Leader Key runs
+  /// shows or hides the next time the panel opens.
   func refreshVisibleRoot() {
-    visibleRoot = userConfig.root.withoutMissingApps(
-      isInstalled: FileManager.default.fileExists(atPath:))
+    visibleRoot = userConfig.root.withoutMissingPaths(
+      exists: FileManager.default.fileExists(atPath:))
   }
 }
 
 extension Group {
-  /// This group without the application actions whose configured path `isInstalled` rejects,
-  /// and without the subgroups that lose every item to that. A group configured empty stays.
-  func withoutMissingApps(isInstalled: (String) -> Bool) -> Group {
+  /// This group without the application and folder actions whose path `exists` rejects, and
+  /// without the subgroups that lose every item to that. A group configured empty stays.
+  func withoutMissingPaths(exists: (String) -> Bool) -> Group {
     var visible = self
     visible.actions = actions.compactMap { item -> ActionOrGroup? in
       switch item {
-      case .action(let action):
-        return action.type == .application && !isInstalled(action.value) ? nil : item
+      case .action(let action) where action.type == .application:
+        return exists(action.value) ? item : nil
+      case .action(let action) where action.type == .folder:
+        return exists(action.folderPath) ? item : nil
+      case .action:
+        return item
       case .group(let group):
-        let shown = group.withoutMissingApps(isInstalled: isInstalled)
+        let shown = group.withoutMissingPaths(exists: exists)
         return shown.actions.isEmpty && !group.actions.isEmpty ? nil : .group(shown)
       }
     }

@@ -15,7 +15,7 @@
 		42454DDB2D71CB39004E1374 /* ConfigValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42454DDA2D71CB39004E1374 /* ConfigValidator.swift */; };
 		42454DDD2D71CBAB004E1374 /* ConfigValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42454DDC2D71CBAB004E1374 /* ConfigValidatorTests.swift */; };
 		1A7E5C0D2F90000000000002 /* CenteredOriginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A7E5C0D2F90000000000001 /* CenteredOriginTests.swift */; };
-		3C4D1A0E2F90000000000002 /* MissingAppsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C4D1A0E2F90000000000001 /* MissingAppsTests.swift */; };
+		3C4D1A0E2F90000000000002 /* MissingPathsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C4D1A0E2F90000000000001 /* MissingPathsTests.swift */; };
 		EC5CEBC4C47B4C5DB2258813 /* URLSchemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC5CEBC4C47B4C5DB2258814 /* URLSchemeTests.swift */; };
 		426E625B2D2E6A98009FD2F2 /* CommandRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 426E625A2D2E6A98009FD2F2 /* CommandRunner.swift */; };
 		4279AFED2C6A175500952A83 /* LaunchAtLogin in Frameworks */ = {isa = PBXBuildFile; productRef = 4279AFEC2C6A175500952A83 /* LaunchAtLogin */; };
@@ -81,7 +81,7 @@
 		42454DDA2D71CB39004E1374 /* ConfigValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigValidator.swift; sourceTree = "<group>"; };
 		42454DDC2D71CBAB004E1374 /* ConfigValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigValidatorTests.swift; sourceTree = "<group>"; };
 		1A7E5C0D2F90000000000001 /* CenteredOriginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenteredOriginTests.swift; sourceTree = "<group>"; };
-		3C4D1A0E2F90000000000001 /* MissingAppsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissingAppsTests.swift; sourceTree = "<group>"; };
+		3C4D1A0E2F90000000000001 /* MissingPathsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissingPathsTests.swift; sourceTree = "<group>"; };
 		EC5CEBC4C47B4C5DB2258814 /* URLSchemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLSchemeTests.swift; sourceTree = "<group>"; };
 		426E625A2D2E6A98009FD2F2 /* CommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandRunner.swift; sourceTree = "<group>"; };
 		4279AFEA2C6A08B100952A83 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = "Leader Key/Support/Info.plist"; sourceTree = SOURCE_ROOT; };
@@ -238,7 +238,7 @@
 			children = (
 				1A7E5C0D2F90000000000001 /* CenteredOriginTests.swift */,
 				9E3B5C1A2F90000000000001 /* ControllerTests.swift */,
-				3C4D1A0E2F90000000000001 /* MissingAppsTests.swift */,
+				3C4D1A0E2F90000000000001 /* MissingPathsTests.swift */,
 				4284834B2E813212009D7EEF /* KeyboardLayoutTests.swift */,
 				42454DDC2D71CBAB004E1374 /* ConfigValidatorTests.swift */,
 				6D9B9C072DBA000000000004 /* DefaultsTests.swift */,
@@ -470,7 +470,7 @@
 			files = (
 				1A7E5C0D2F90000000000002 /* CenteredOriginTests.swift in Sources */,
 				9E3B5C1A2F90000000000002 /* ControllerTests.swift in Sources */,
-				3C4D1A0E2F90000000000002 /* MissingAppsTests.swift in Sources */,
+				3C4D1A0E2F90000000000002 /* MissingPathsTests.swift in Sources */,
 				42454DDD2D71CBAB004E1374 /* ConfigValidatorTests.swift in Sources */,
 				EC5CEBC4C47B4C5DB2258813 /* URLSchemeTests.swift in Sources */,
 				5B1E7A202EF0000000000003 /* URLTemplateTests.swift in Sources */,

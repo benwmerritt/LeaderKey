@@ -3,12 +3,18 @@ import XCTest
 
 @testable import Leader_Key
 
-final class MissingAppsTests: XCTestCase {
+final class MissingPathsTests: XCTestCase {
   private let installed = "/Applications/Installed.app"
   private let missing = "/Applications/Missing.app"
+  private let presentFolder = "/Folders/Present"
+  private let missingFolder = "/Folders/Missing"
 
   private func app(_ key: String, _ path: String) -> ActionOrGroup {
     .action(Action(key: key, type: .application, value: path))
+  }
+
+  private func folder(_ key: String, _ path: String) -> ActionOrGroup {
+    .action(Action(key: key, type: .folder, value: path))
   }
 
   private func group(_ key: String, _ actions: [ActionOrGroup]) -> ActionOrGroup {
@@ -16,7 +22,9 @@ final class MissingAppsTests: XCTestCase {
   }
 
   private func visible(_ actions: [ActionOrGroup]) -> Group {
-    Group(key: nil, actions: actions).withoutMissingApps { $0 == self.installed }
+    Group(key: nil, actions: actions).withoutMissingPaths {
+      [self.installed, self.presentFolder].contains($0)
+    }
   }
 
   private func keys(_ group: Group) -> [String?] {
@@ -27,15 +35,28 @@ final class MissingAppsTests: XCTestCase {
     XCTAssertEqual(keys(visible([app("i", installed), app("m", missing)])), ["i"])
   }
 
-  func testLeavesURLCommandAndFolderActionsAlone() {
+  func testHidesAFolderThatIsMissing() {
+    XCTAssertEqual(keys(visible([folder("p", presentFolder), folder("m", missingFolder)])), ["p"])
+  }
+
+  func testChecksAFolderAtItsExpandedPath() {
+    var checked: [String] = []
+    _ = Group(key: nil, actions: [folder("m", "~/Media Library")]).withoutMissingPaths {
+      checked.append($0)
+      return true
+    }
+
+    XCTAssertEqual(checked, [NSHomeDirectory() + "/Media Library"])
+  }
+
+  func testLeavesURLAndCommandActionsAlone() {
     let others: [ActionOrGroup] = [
       .action(Action(key: "u", type: .url, value: "https://example.com")),
       .action(Action(key: "c", type: .command, value: "/no/such/command")),
-      .action(Action(key: "f", type: .folder, value: "/no/such/folder")),
     ]
 
     XCTAssertEqual(
-      Group(key: nil, actions: others).withoutMissingApps { _ in false }.actions, others)
+      Group(key: nil, actions: others).withoutMissingPaths { _ in false }.actions, others)
   }
 
   func testHidesMissingAppsInsideNestedGroups() {
@@ -49,7 +70,7 @@ final class MissingAppsTests: XCTestCase {
 
   func testHidesAGroupWhoseEveryDescendantIsMissing() {
     let root = visible([
-      group("a", [app("m", missing), group("b", [app("n", missing)])]),
+      group("a", [app("m", missing), group("b", [folder("n", missingFolder)])]),
       group("c", [app("i", installed)]),
     ])
 
@@ -63,7 +84,7 @@ final class MissingAppsTests: XCTestCase {
   func testChecksTheConfiguredPath() {
     var checked: [String] = []
     _ = Group(key: nil, actions: [app("i", installed), group("g", [app("m", missing)])])
-      .withoutMissingApps {
+      .withoutMissingPaths {
         checked.append($0)
         return true
       }
@@ -107,6 +128,19 @@ final class VisibleRootTests: XCTestCase {
     try FileManager.default.createDirectory(atPath: appPath, withIntermediateDirectories: true)
     state.refreshVisibleRoot()
     XCTAssertEqual(state.visibleRoot.actions.map { $0.item.key }, ["l"])
+  }
+
+  func testShowsAFolderCreatedSinceTheLastRefresh() throws {
+    let folderPath = (tempDir as NSString).appendingPathComponent("Later")
+    config.root = Group(
+      key: nil, actions: [.action(Action(key: "f", type: .folder, value: folderPath))])
+
+    state.refreshVisibleRoot()
+    XCTAssertTrue(state.visibleRoot.actions.isEmpty)
+
+    try FileManager.default.createDirectory(atPath: folderPath, withIntermediateDirectories: true)
+    state.refreshVisibleRoot()
+    XCTAssertEqual(state.visibleRoot.actions.map { $0.item.key }, ["f"])
   }
 
   func testKeepsEveryKeyInTheConfig() {
