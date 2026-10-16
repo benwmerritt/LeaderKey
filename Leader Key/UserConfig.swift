@@ -632,6 +632,11 @@ struct Action: Item, Codable, Equatable {
       return value
     }
   }
+
+  var folderPath: String {
+    (value as NSString).expandingTildeInPath
+  }
+
   private enum CodingKeys: String, CodingKey { case key, type, label, value, iconPath }
 
   init(
