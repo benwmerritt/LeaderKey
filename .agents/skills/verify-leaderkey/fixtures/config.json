@@ -1,0 +1,38 @@
+{
+  "type": "group",
+  "actions": [
+    { "key": "c", "type": "application", "value": "/System/Applications/Calculator.app" },
+    {
+      "key": "o",
+      "type": "group",
+      "label": "Open Apps",
+      "actions": [
+        { "key": "a", "type": "application", "value": "/System/Applications/Utilities/Activity Monitor.app" },
+        { "key": "b", "type": "application", "value": "/System/Applications/Books.app" },
+        { "key": "c", "type": "application", "value": "/System/Applications/Calculator.app" },
+        { "key": "d", "type": "application", "value": "/System/Applications/Dictionary.app" },
+        { "key": "f", "type": "application", "value": "/System/Applications/Font Book.app" },
+        { "key": "k", "type": "application", "value": "/System/Applications/Clock.app" },
+        { "key": "m", "type": "application", "value": "/System/Applications/Maps.app" },
+        { "key": "n", "type": "application", "value": "/System/Applications/Notes.app" },
+        { "key": "p", "type": "application", "value": "/System/Applications/Preview.app" },
+        { "key": "r", "type": "application", "value": "/System/Applications/Reminders.app" },
+        { "key": "s", "type": "application", "value": "/System/Applications/Stickies.app" },
+        { "key": "t", "type": "application", "value": "/System/Applications/Utilities/Terminal.app" },
+        { "key": "x", "type": "application", "value": "/System/Applications/Utilities/Script Editor.app" },
+        {
+          "key": "u",
+          "type": "group",
+          "label": "Utilities",
+          "actions": [
+            { "key": "c", "type": "application", "value": "/System/Applications/Utilities/Console.app" },
+            { "key": "d", "type": "application", "value": "/System/Applications/Utilities/Disk Utility.app" }
+          ]
+        }
+      ]
+    },
+    { "key": "t", "type": "command", "label": "Mark the run", "value": "touch /private/tmp/lk-verify-marker" },
+    { "key": "l", "type": "url", "label": "Leader Key repo", "value": "https://github.com/benwmerritt/LeaderKey" },
+    { "key": "g", "type": "url", "label": "Search the repo", "value": "https://github.com/benwmerritt/LeaderKey/search?q={query}" }
+  ]
+}

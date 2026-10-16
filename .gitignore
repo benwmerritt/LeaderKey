@@ -4,3 +4,6 @@ build/
 
 # Mac system files
 .DS_Store
+
+# lk-verify evidence and run state (.agents/skills/verify-leaderkey)
+.verify/
