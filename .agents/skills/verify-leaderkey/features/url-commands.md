@@ -12,10 +12,12 @@ Other tools (Raycast, Alfred, shell scripts) control Leader Key by opening `lead
 - `url-config-reload` reads the config file again, so an edit made on disk shows in the panel.
 - `url-settings` opens Settings, and `url-about` opens the About window with the version and build.
 - `url-unknown` treats any other host, such as `leaderkey://anything`, as `show`.
+- `url-cold-launch` launches Leader Key when it is not running, then does what the URL asks once it has finished launching.
 
 ## How to get to it (user POV)
 
 - `open "leaderkey://<command>"` from a shell, or a Raycast or Alfred action that opens the URL.
+- The same, while Leader Key is not running.
 
 ## Driving it with lk-verify
 
@@ -33,6 +35,7 @@ Preconditions:
 - **About.** Run `drive "$RUN" about measure about shot about`. A 284.0x170.0 window; the shot shows the version and build that `doctor` reported for the run.
 - **Settings.** Run `drive "$RUN" settings wait 2 measure settings shot settings` as the last step before `end`. A 780.0x752.0 window; the shot shows Settings.
 - **Unknown host.** Run `drive "$RUN" url "leaderkey://anything" measure unknown escape`. The panel is open.
+- **Cold launch.** Run `drive "$RUN" cold leaderkey://show measure cold-show escape cold "leaderkey://navigate?keys=o&execute=false" measure cold-navigate escape`. `cold-show` is the 580.0x168.0 root panel and `cold-navigate` the 580.0x469.0 "Open Apps" list, each centred. A build that crashes instead stops the drive with "this run's build is not running".
 
 ## Gotchas
 
