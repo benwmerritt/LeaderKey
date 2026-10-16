@@ -227,12 +227,12 @@ You need to make sure your shell environment is correctly set up for non-interac
 
 #### Why is an app missing from the panel?
 
-Its app isn't installed at the path in its application action, so this Mac's panel leaves the key out. A group whose every key is hidden that way is left out too. One config can then serve several Macs that have different apps.
+Its app isn't installed at the path the key opens (an application action in `config.json`, `app =` in `config.toml`), so this Mac's panel leaves the key out. A group whose every key is hidden that way is left out too. One config can then serve several Macs that have different apps.
 
 - A hidden key acts like an unbound one: pressing it shakes the panel. It counts nowhere, not even in a group's item count.
 - Only the path in the config counts. A copy of the app somewhere else doesn't, because pressing the key opens that path.
 - Leader Key checks each time the panel opens, so an app installed while it runs shows up the next time you open the panel.
-- Settings still lists every key, and saving keeps them all in the config file.
+- Settings still lists every key, and the config file keeps them all.
 - A `leaderkey://navigate` URL stops at the first key the panel doesn't show, hidden or unbound, so the keys after it never run in the wrong group.
 
 
