@@ -48,13 +48,15 @@ fetch() {
 
 stage() {
   local ref="" sha build source
-  if [[ ${1:-} == --ref ]]; then
-    ref="${2:?--ref needs a revision}"
+  if (($# == 2)) && [[ $1 == --ref ]]; then
+    ref="$2"
     sha="$(git -C "$repo" rev-parse --verify "$ref^{commit}")"
     source="$ref ($(git -C "$repo" rev-parse --short "$sha"))"
-  else
+  elif (($# == 0)); then
     sha="$(git -C "$repo" rev-parse HEAD)"
     source="working tree on $(git -C "$repo" rev-parse --short HEAD)"
+  else
+    fail "stage takes no arguments, or --ref REV"
   fi
   # Releases number builds by commit count; copy that, since the tree goes over without .git.
   build="$(git -C "$repo" rev-list --count "$sha")"
@@ -62,7 +64,9 @@ stage() {
   run="$(date -u +%m%d-%H%M%S)-$(git -C "$repo" rev-parse --short "$sha")"
   local dir="/private/tmp/lk-verify-$run"
 
-  ssh "$host" "mkdir -p '$dir/src' '$dir/evidence'"
+  # mkdir without -p claims the run, so two stages in the same second never share a directory.
+  ssh "$host" "mkdir '$dir' && mkdir '$dir/src' '$dir/evidence'" ||
+    fail "$dir already exists on $host; stage again"
   if [[ -n $ref ]]; then
     git -C "$repo" archive --format=tar "$sha" | ssh "$host" "tar -x -C '$dir/src'"
   else

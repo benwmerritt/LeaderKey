@@ -73,7 +73,7 @@ Each run's evidence directory holds `steps.log` (every step with its UTC time), 
 ## Cleanup
 
 1. When a `running APP` check showed an app was not running before the action launched it, `drive "$RUN" quit APP`. Apps that were already running stay.
-2. `lk-verify end "$RUN"`, after a failed drive as much as a good one. It quits the build, clears Leader Key's defaults and imports the snapshot, relaunches the installed app if it had been running, releases the lock, and fetches the evidence. Done when it prints `Leader Key defaults restored exactly`, `installed app relaunched: <version>` (when it had been running) and `lock released`.
+2. `lk-verify end "$RUN"`, after a failed drive as much as a good one. It quits the build and any installed copy launched meanwhile, clears Leader Key's defaults and imports the snapshot, relaunches the installed app if it had been running before `begin`, releases the lock, and fetches the evidence. Done when it prints `Leader Key defaults restored exactly`, `installed app relaunched: <version>` (when it had been running) and `lock released`.
 3. `lk-verify clean "$RUN"` unregisters the build from LaunchServices and deletes the run on mba13. The evidence in `.verify/$RUN/` stays.
 
 When `end` cannot finish, it says what failed and keeps the lock, so no other smoke test starts on a half-restored Mac. Run doctor and repair by hand on mba13: `defaults delete com.brnbw.Leader-Key && defaults import com.brnbw.Leader-Key /private/tmp/lk-verify-$RUN/defaults-before.plist`, then `open -a "/Applications/Leader Key.app"`, then `rm -rf /tmp/leaderkey-smoke.lock` once its owner file names this run.

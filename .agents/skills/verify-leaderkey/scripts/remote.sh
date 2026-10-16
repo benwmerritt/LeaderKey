@@ -179,6 +179,11 @@ restore() {
     echo "this run's build would not quit" >&2
     status=1
   }
+  # An installed copy launched during the run read the run's defaults, so it goes too.
+  stop "$installed" || {
+    echo "the installed app would not quit" >&2
+    status=1
+  }
   if [[ -f $run_dir/defaults-before.plist || -f $run_dir/defaults-absent ]]; then
     # import merges into what is there, so clear the domain first.
     defaults delete "$domain" 2>/dev/null
@@ -198,7 +203,7 @@ restore() {
     fi
   fi
   rm -f "$marker"
-  if [[ $(cat "$run_dir/installed-was-running" 2>/dev/null) == yes ]] && ! running "$installed"; then
+  if [[ $(cat "$run_dir/installed-was-running" 2>/dev/null) == yes ]]; then
     if launch "$installed"; then
       echo "installed app relaunched: $(version "$installed")"
     else
@@ -270,8 +275,8 @@ begin() {
 
 set_default() {
   need_lock
-  defaults write "$domain" "$@"
-  stop "$app"
+  defaults write "$domain" "$@" || fail "defaults write $* failed"
+  stop "$app" || fail "this run's build would not quit"
   launch "$app" || fail "this run's build did not relaunch"
   wait_ready || fail "the relaunched build never showed its panel"
   log_step "set $*"
